@@ -228,12 +228,21 @@ class AkkaClusterSupervisorActor(daoActor: ActorRef) extends InstrumentedActor {
     //extract spark.proxy.user from contextConfig, if available and pass it to $managerStartCommand
     var cmdString = if (driverMode == "mesos-cluster") {
       s"$managerStartCommand $driverMode $workDir '$contextContent' ${selfAddress.toString}"
-    } else {
+    } else if (driverMode == "standalone-cluster") {
+      val sparkMasterAddress = config.getString("spark.master")
+      s"$managerStartCommand $driverMode $workDir $contextContent ${selfAddress.toString}" +
+        s" --master $sparkMasterAddress"
+    } else if (driverMode == "client") {
       s"$managerStartCommand $driverMode $workDir $contextContent ${selfAddress.toString}"
+    } else {
+      failureFunc(new IllegalArgumentException(s"Unsupported driver mode $driverMode provided. " +
+          "Supported driver modes are client, standalone-cluster and mesos-cluster"))
+      return
     }
 
     if (contextConfig.hasPath(SparkJobUtils.SPARK_PROXY_USER_PARAM)) {
-      cmdString = cmdString + s" ${contextConfig.getString(SparkJobUtils.SPARK_PROXY_USER_PARAM)}"
+      cmdString = cmdString + s" --proxy_user ${contextConfig.getString(
+          SparkJobUtils.SPARK_PROXY_USER_PARAM)}"
     }
 
     val pb = Process(cmdString)
