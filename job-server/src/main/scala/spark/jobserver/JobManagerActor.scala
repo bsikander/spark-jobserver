@@ -10,7 +10,8 @@ import com.typesafe.config.Config
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.scheduler.SparkListener
-import org.apache.spark.scheduler.SparkListenerApplicationEnd
+import org.apache.spark.scheduler.{SparkListenerApplicationStart,
+  SparkListenerApplicationEnd, SparkListenerExecutorAdded, SparkListenerExecutorRemoved}
 import org.joda.time.DateTime
 import org.scalactic._
 import spark.jobserver.api.{JobEnvironment, DataFileCache}
@@ -21,6 +22,8 @@ import spark.jobserver.util.{ContextURLClassLoader, SparkJobUtils}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 import spark.jobserver.common.akka.InstrumentedActor
+import org.apache.spark.scheduler.SparkListenerJobStart
+import org.apache.spark.scheduler.SparkListenerJobEnd
 
 object JobManagerActor {
   // Messages
@@ -144,10 +147,40 @@ class JobManagerActor(daoActor: ActorRef)
   private def sparkListener = {
     new SparkListener() {
       override def onApplicationEnd(event: SparkListenerApplicationEnd) {
-        logger.info("Got Spark Application end event, stopping job manager.")
-        self ! PoisonPill
+      logger.info("[BEHROZ]==>Got Spark Application end event, stopping job manger.")
+      self ! PoisonPill
       }
     }
+  }
+
+  private def applicationStartSparkListener = new SparkListener() {
+      override def onApplicationStart(event: SparkListenerApplicationStart) {
+        logger.info("[BEHROZ]==>Got Spark Application start event, starting job manger.")
+      }
+  }
+
+  private def executorAddedSparkListener = new SparkListener() {
+      override def onExecutorAdded(event: SparkListenerExecutorAdded) {
+        logger.info("[BEHROZ]==>Got executor start event, added executor.")
+      }
+  }
+
+  private def executorRemovedSparkListener = new SparkListener() {
+      override def onExecutorRemoved(event: SparkListenerExecutorRemoved) {
+        logger.info("[BEHROZ]==>Got executor removed event, removed executor.")
+      }
+  }
+
+  private def jobStartedSparkListener = new SparkListener() {
+      override def onJobStart(event: SparkListenerJobStart) {
+        logger.info("[BEHROZ]==>JobStarted")
+      }
+  }
+
+  private def jobEndSparkListener = new SparkListener() {
+      override def onJobEnd(event: SparkListenerJobEnd) {
+        logger.info("[BEHROZ]==>onJobEnd")
+      }
   }
 
   def wrappedReceive: Receive = {
@@ -168,6 +201,11 @@ class JobManagerActor(daoActor: ActorRef)
         factory = getContextFactory()
         jobContext = factory.makeContext(config, contextConfig, contextName)
         jobContext.sparkContext.addSparkListener(sparkListener)
+        jobContext.sparkContext.addSparkListener(applicationStartSparkListener)
+        jobContext.sparkContext.addSparkListener(executorAddedSparkListener)
+        jobContext.sparkContext.addSparkListener(executorRemovedSparkListener)
+        jobContext.sparkContext.addSparkListener(jobStartedSparkListener)
+        jobContext.sparkContext.addSparkListener(jobEndSparkListener)
         sparkEnv = SparkEnv.get
         jobCache = new JobCacheImpl(jobCacheSize, daoActor, jobContext.sparkContext, jarLoader)
         getSideJars(contextConfig).foreach { jarUri => jobContext.sparkContext.addJar(jarUri) }
