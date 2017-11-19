@@ -9,7 +9,7 @@ import akka.cluster.Cluster
 import akka.cluster.ClusterEvent.{InitialStateAsEvents, MemberEvent, MemberUp}
 import akka.util.Timeout
 import com.typesafe.config.{Config, ConfigFactory, ConfigRenderOptions}
-import spark.jobserver.util.SparkJobUtils
+import spark.jobserver.util.{SparkJobUtils, Launcher, ContextLauncher}
 
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
@@ -21,6 +21,8 @@ import akka.pattern.gracefulStop
 import org.joda.time.DateTime
 import org.slf4j.LoggerFactory
 import spark.jobserver.io.JobDAOActor.CleanContextJobInfos
+import org.apache.spark.launcher.SparkLauncher
+import org.apache.commons.io.FilenameUtils
 
 /**
  * The AkkaClusterSupervisorActor launches Spark Contexts as external processes
@@ -246,10 +248,50 @@ class AkkaClusterSupervisorActor(daoActor: ActorRef, dataManagerActor: ActorRef)
     if (contextConfig.hasPath(SparkJobUtils.SPARK_PROXY_USER_PARAM)) {
       managerArgs = managerArgs :+ contextConfig.getString(SparkJobUtils.SPARK_PROXY_USER_PARAM)
     }
+    val launcher: Launcher = new ContextLauncher(config, contextConfig, selfAddress.toString, contextActorName)
 
-    val contextLogger = LoggerFactory.getLogger("manager_start")
-    val process = Process(managerStartCommand, managerArgs)
-    process.run(ProcessLogger(out => contextLogger.info(out), err => contextLogger.warn(err)))
+//    val contextLogger = LoggerFactory.getLogger("manager_start")
+//    val processLogger = ProcessLogger(out => contextLogger.info(out), err => contextLogger.warn(err))
+//    val process = Process(managerStartCommand, managerArgs)
+//    val test = process.run(ProcessLogger(out => contextLogger.info(out), err => contextLogger.warn(err)))
+
+    // TODO: Source setenv file at managerStartCommand location
+    // because whereever this file is, setenv should also be in that location
+    // Source this setenv file
+    // Then use sys.env.get("HOME")
+    // https://stackoverflow.com/questions/9997292/how-to-read-environment-variables-in-scala
+    // TODO: This parameter for manager_start needs to go away
+//    val absoluteAppDirectory = new java.io.File(managerStartCommand).getCanonicalFile().getParent()
+//    val setEnvScriptPath = absoluteAppDirectory + "/setenv.sh"
+//    val setEnvExitCode = Process(setEnvScriptPath).run(processLogger).exitValue()
+//    if (setEnvExitCode != 0) {
+//      logger.error(s"Failed to load environment variables from setenv.sh script, path $setEnvScriptPath")
+//    }
+//    import sys.process._
+//    val scriptOutput = "$setEnvScript" !!
+
+//    val launcher = new SparkLauncher()
+//    launcher.setSparkHome(sys.env("$SPARK_HOME"))
+//    launcher.setMaster(master)
+//    launcher.setDeployMode(deployMode)
+//    launcher.setAppResource(
+//        "/Users/d068274/Documents/Projects/git/spark-jobserver-opensource" +
+//        "/job-server-extras/target/scala-2.11/spark-job-server.jar")
+        //TODO: Add path here
+    //launcher.setMainClass("spark.jobserver.JobManager")
+    // TODO: Add config file
+    //launcher.addAppArgs(selfAddress.toString, contextActorName, "/Users/d068274/Documents/dev_sqldao.conf")
+    //launcher.addSparkArg("--conf",
+     // TODO: Fix this
+    //"spark.executor.extraJavaOptions=-Dlog4j.configuration=file:$CONF_DIR/log4j-server.properties
+    //-DLOG_DIR=")
+    //val driverJavaOptions =
+    // "-XX:+UseConcMarkSweepGC -verbose:gc -XX:+PrintGCTimeStamps -XX:MaxPermSize=512m
+    //-XX:+CMSClassUnloadingEnabled "
+    //launcher.addSparkArg("--driver-java-options", driverJavaOptions)
+//    launcher.addSparkArg("--driver-memory", "1G")
+//    launcher.startApplication()
+
 
     contextInitInfos(contextActorName) = (mergedContextConfig, isAdHoc, successFunc, failureFunc)
   }
