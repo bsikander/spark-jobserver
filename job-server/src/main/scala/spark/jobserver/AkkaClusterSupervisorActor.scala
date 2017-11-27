@@ -21,8 +21,6 @@ import akka.pattern.gracefulStop
 import org.joda.time.DateTime
 import org.slf4j.LoggerFactory
 import spark.jobserver.io.JobDAOActor.CleanContextJobInfos
-import org.apache.spark.launcher.SparkLauncher
-import org.apache.commons.io.FilenameUtils
 
 /**
  * The AkkaClusterSupervisorActor launches Spark Contexts as external processes
