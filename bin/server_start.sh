@@ -18,7 +18,9 @@ get_abs_script_path() {
 
 get_abs_script_path
 
+set -a
 . $appdir/setenv.sh
+set +a
 
 GC_OPTS_SERVER="$GC_OPTS_BASE -Xloggc:$appdir/$GC_OUT_FILE_NAME"
 
