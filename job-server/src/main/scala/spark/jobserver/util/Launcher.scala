@@ -6,6 +6,7 @@ import java.io.File
 import com.typesafe.config.Config
 import org.slf4j.LoggerFactory
 import org.apache.spark.launcher.SparkLauncher
+import org.apache.spark.launcher.SparkAppHandle
 
 /**
  * This class aims to eliminate the need to call spark-submit
@@ -27,7 +28,7 @@ abstract class Launcher(config: Config) {
     protected final val currentWorkingDirectory = getEnvironmentVariable("appdir")
     logger.info(s"Spark launcher working directory is $currentWorkingDirectory")
 
-    protected final val sjsJarPath = new File(currentWorkingDirectory, "spark-job-server.jar").toString()
+    protected final val sjsJarPath = getEnvironmentVariable("MANAGER_JAR_FILE")
     protected final val baseGCOPTS = getEnvironmentVariable("GC_OPTS_BASE")
     protected final val baseJavaOPTS = getEnvironmentVariable("JAVA_OPTS_BASE")
 

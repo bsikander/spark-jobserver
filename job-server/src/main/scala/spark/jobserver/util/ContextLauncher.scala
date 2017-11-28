@@ -11,26 +11,32 @@ class ContextLauncher(systemConfig: Config, contextConfig: Config,
   val logger = LoggerFactory.getLogger("spark-context-launcher")
 
   override def addCustomArguments() {
-      val log4jPath = new File(currentWorkingDirectory, "log4j-server.properties").toString()
-      val gcFilePath = new File(contextDir, getEnvironmentVariable("GC_OUT_FILE_NAME")).toString()
-      val loggingOpts =
-        s"-Dlog4j.configuration=file:$log4jPath -DLOG_DIR=$contextDir"
-      val gcOPTSManager = s"$baseGCOPTS -Xloggc:$gcFilePath"
+      var loggingOpts = getEnvironmentVariable("MANAGER_LOGGING_OPTS")
       val configOverloads = getEnvironmentVariable("CONFIG_OVERRIDES")
-      val sparkSubmitJavaOptions = getEnvironmentVariable("SPARK_SUBMIT_JAVA_OPTIONS")
+      val sparkSubmitJavaOptions = getEnvironmentVariable("MANAGER_SPARK_SUBMIT_OPTIONS")
+      var gcOPTS = baseGCOPTS
 
+      if (deployMode == "client") {
+        val gcFilePath = new File(contextDir, getEnvironmentVariable("GC_OUT_FILE_NAME")).toString()
+        loggingOpts += s" -DLOG_DIR=$contextDir"
+        gcOPTS += s" -Xloggc:$gcFilePath"
+      }
+      launcher.setVerbose(true)
       launcher.setMainClass("spark.jobserver.JobManager")
-      launcher.addAppArgs(masterAddress, contextActorName, getEnvironmentVariable("conffile"))
+      launcher.addAppArgs(masterAddress, contextActorName, getEnvironmentVariable("MANAGER_CONF_FILE"))
       launcher.addSparkArg("--driver-memory", getEnvironmentVariable("JOBSERVER_MEMORY"))
       launcher.addSparkArg("--conf", s"spark.executor.extraJavaOptions=$loggingOpts")
       launcher.addSparkArg("--driver-java-options",
-          s"$gcOPTSManager $baseJavaOPTS $loggingOpts $configOverloads $sparkSubmitJavaOptions")
+          s"$gcOPTS $baseJavaOPTS $loggingOpts $configOverloads $sparkSubmitJavaOptions")
 
       if (contextConfig.hasPath(SparkJobUtils.SPARK_PROXY_USER_PARAM)) {
          launcher.addSparkArg("--proxy-user", contextConfig.getString(SparkJobUtils.SPARK_PROXY_USER_PARAM))
       }
 
-      val keyTab = getEnvironmentVariable("JOBSERVER_KEYTAB")
-      if (keyTab != "") launcher.addSparkArg("--keytab", keyTab)
+      val submitOutputFile = new File(contextDir, "spark-job-server.out")
+      // This function was introduced in 2.1.0 Spark version, for older versions, it will
+      // break with MethodNotFound exception.
+      launcher.redirectOutput(submitOutputFile)
+      launcher.redirectError(submitOutputFile)
     }
 }
