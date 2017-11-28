@@ -1,7 +1,9 @@
 package spark.jobserver.util
 
+import java.io.File
 import com.typesafe.config.Config
 import org.slf4j.LoggerFactory
+import org.apache.spark.launcher.SparkLauncher
 
 class ContextLauncher(systemConfig: Config, contextConfig: Config,
     masterAddress: String, contextActorName: String, contextDir: String)
@@ -9,9 +11,11 @@ class ContextLauncher(systemConfig: Config, contextConfig: Config,
   val logger = LoggerFactory.getLogger("spark-context-launcher")
 
   override def addCustomArguments() {
+      val log4jPath = new File(currentWorkingDirectory, "log4j-server.properties").toString()
+      val gcFilePath = new File(contextDir, getEnvironmentVariable("GC_OUT_FILE_NAME")).toString()
       val loggingOpts =
-        s"-Dlog4j.configuration=file:$currentWorkingDirectory/log4j-server.properties -DLOG_DIR=$contextDir"
-      val gcOPTSManager = s"$baseGCOPTS -Xloggc:$contextDir/" + getEnvironmentVariable("GC_OUT_FILE_NAME")
+        s"-Dlog4j.configuration=file:$log4jPath -DLOG_DIR=$contextDir"
+      val gcOPTSManager = s"$baseGCOPTS -Xloggc:$gcFilePath"
       val configOverloads = getEnvironmentVariable("CONFIG_OVERRIDES")
       val sparkSubmitJavaOptions = getEnvironmentVariable("SPARK_SUBMIT_JAVA_OPTIONS")
 

@@ -36,12 +36,15 @@ abstract class Launcher(config: Config) {
 
     protected def addCustomArguments()
 
-    final def start() {
+    final def start(): Boolean = {
+      if (!validate()) return false
+
       logger.info("Add custom arguments to launcher")
-      this.addCustomArguments()
+      addCustomArguments()
 
       logger.info("Start launcher application")
       launcher.startApplication()
+      true
     }
 
     protected final def getEnvironmentVariable(name: String): String = {
@@ -54,5 +57,13 @@ abstract class Launcher(config: Config) {
       launcher.setMaster(master)
       launcher.setDeployMode(deployMode)
       launcher.setAppResource(sjsJarPath)
+    }
+
+    private def validate(): Boolean = {
+      if (currentWorkingDirectory.isEmpty()) {
+        logger.error("appdir environment variable is empty. Probably setenv.sh was not loaded properly.")
+        false
+      }
+      true
     }
 }
