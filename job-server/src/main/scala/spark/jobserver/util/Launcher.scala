@@ -31,7 +31,7 @@ abstract class Launcher(config: Config) {
     protected final val sjsJarPath = getEnvironmentVariable("MANAGER_JAR_FILE")
     protected final val baseGCOPTS = getEnvironmentVariable("GC_OPTS_BASE")
     protected final val baseJavaOPTS = getEnvironmentVariable("JAVA_OPTS_BASE")
-
+    private var handler: SparkAppHandle = null
     protected val launcher = new SparkLauncher()
     initSparkLauncher()
 
@@ -44,8 +44,13 @@ abstract class Launcher(config: Config) {
       addCustomArguments()
 
       logger.info("Start launcher application")
-      launcher.startApplication()
+      handler = launcher.startApplication()
+      logger.info(s"Current state of application $getState")
       true
+    }
+
+    final def getState(): String = {
+      handler.getState().name()
     }
 
     protected final def getEnvironmentVariable(name: String): String = {

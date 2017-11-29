@@ -53,6 +53,7 @@ class AkkaClusterSupervisorActor(daoActor: ActorRef, dataManagerActor: ActorRef)
                                                 TimeUnit.SECONDS)
   val contextDeletionTimeout = SparkJobUtils.getContextDeletionTimeout(config)
   val managerStartCommand = config.getString("deploy.manager-start-cmd")
+  var launcher: Launcher = null
   import context.dispatcher
 
   //actor name -> (context isadhoc, success callback, failure callback)
@@ -252,7 +253,7 @@ class AkkaClusterSupervisorActor(daoActor: ActorRef, dataManagerActor: ActorRef)
       val process = Process(managerStartCommand, managerArgs)
       process.run(ProcessLogger(out => contextLogger.info(out), err => contextLogger.warn(err)))
     } else {
-      val launcher: Launcher = new ContextLauncher(config, contextConfig,
+      launcher = new ContextLauncher(config, contextConfig,
           selfAddress.toString, contextActorName, contextDir.toString)
       launcher.start()
     }
