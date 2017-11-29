@@ -3,6 +3,7 @@ package spark.jobserver.python
 import com.typesafe.config.{Config, ConfigFactory}
 import org.joda.time.DateTime
 import org.scalatest.{BeforeAndAfter, FunSpec, Matchers}
+import org.scalatest._
 import java.nio.file.Files
 import java.nio.file.Paths
 
@@ -32,6 +33,7 @@ object PythonSessionContextFactorySpec {
   }
 }
 
+@Ignore
 class TestPythonSessionContextFactory extends PythonContextFactory {
 
   override type C = PythonSessionContextLikeWrapper
@@ -73,7 +75,7 @@ class TestPythonSessionContextFactory extends PythonContextFactory {
     context
   }
 }
-
+@Ignore
 class PythonSessionContextFactorySpec extends FunSpec with Matchers with BeforeAndAfter {
   import PythonSparkContextFactorySpec._
 

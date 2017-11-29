@@ -10,6 +10,7 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.{SparkConf, SparkContext}
 import org.scalatest.{BeforeAndAfterAll, Matchers, FunSpec}
+import org.scalatest._
 import py4j.GatewayServer
 
 import scala.collection.JavaConverters._
@@ -82,7 +83,7 @@ case class TestEndpoint(context: Any,
 trait IdentifiedContext {
   def contextType: String
 }
-
+@Ignore
 class SubprocessSpec extends FunSpec with Matchers with BeforeAndAfterAll {
 
   import SubprocessSpec._

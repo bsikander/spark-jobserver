@@ -6,11 +6,12 @@ import spark.jobserver.io.JobDAOActor
 import spark.jobserver._
 import scala.concurrent.duration._
 import scala.collection.JavaConverters._
+import org.scalatest._
 
 object PythonJobManagerSpec extends JobSpecConfig {
   override val contextFactory = classOf[PythonSessionContextFactory].getName
 }
-
+@Ignore
 class PythonJobManagerSpec extends ExtrasJobSpecBase(PythonJobManagerSpec.getNewSystem) {
 
   before {
