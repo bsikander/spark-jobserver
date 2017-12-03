@@ -7,6 +7,7 @@ import com.typesafe.config.Config
 import org.slf4j.LoggerFactory
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.launcher.SparkAppHandle
+import java.util.concurrent._
 
 /**
  * This class aims to eliminate the need to call spark-submit
@@ -28,6 +29,11 @@ abstract class Launcher(config: Config) {
     protected final val baseJavaOPTS = getEnvironmentVariable("JAVA_OPTS_BASE")
     protected val launcher = new SparkLauncher()
 
+    private final val listenerService = Executors.newCachedThreadPool();
+
+    val appListener = new SparkAppListener();
+    listenerService.execute(appListener);
+
     protected def addCustomArguments()
 
     final def start(): Boolean = {
@@ -38,9 +44,9 @@ abstract class Launcher(config: Config) {
       try {
         logger.info("Adding custom arguments to launcher")
         addCustomArguments()
-
+        launcher.setConf("spark.extraListeners", "spark.jobserver.util.ManagerSparkListener")
         logger.info("Start launcher application")
-        handler = launcher.startApplication()
+        handler = launcher.startApplication(appListener)
         true
       } catch {
         case err: Exception => logger.error("Failed to launch", err); false
