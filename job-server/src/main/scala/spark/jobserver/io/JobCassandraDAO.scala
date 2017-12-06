@@ -237,7 +237,7 @@ class JobCassandraDAO(config: Config) extends JobDAO with FileCacher {
         new DateTime(row.getTimestamp(UploadTime))
       ),
       row.getString(Classpath),
-      new DateTime(row.getTimestamp(StartTime)),
+      Option(row.getTimestamp(StartTime)).map(new DateTime(_)),
       Option(row.getTimestamp(EndTime)).map(new DateTime(_)),
       errorData
     )
@@ -260,8 +260,6 @@ class JobCassandraDAO(config: Config) extends JobDAO with FileCacher {
   override def saveJobInfo(jobInfo: JobInfo): Unit = {
     val JobInfo(jobId, contextName, binaryInfo, classPath, startTime, endTime, error) = jobInfo
 
-    val localDate: LocalDate = LocalDate.fromMillisSinceEpoch(jobInfo.startTime.getMillis)
-
     def fillInsert(insert: Insert): Insert = {
       insert.
         value(JobId, UUID.fromString(jobId)).
@@ -269,10 +267,12 @@ class JobCassandraDAO(config: Config) extends JobDAO with FileCacher {
         value(AppName, binaryInfo.appName).
         value(BType, binaryInfo.binaryType.name).
         value(UploadTime, binaryInfo.uploadTime.getMillis).
-        value(Classpath, classPath).
-        value(StartTime, startTime.getMillis).
-        value(StartDate, localDate)
+        value(Classpath, classPath)
 
+      startTime.foreach { s =>
+        insert.value(StartTime, s.getMillis)
+        insert.value(StartDate, LocalDate.fromMillisSinceEpoch(s.getMillis))
+      }
       endTime.foreach{e => insert.value(EndTime, e.getMillis)}
       error.foreach { err =>
         insert.value(Error, err.message)

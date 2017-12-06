@@ -15,7 +15,7 @@ class ManagerSparkListener(contextName: String, actorRef: ActorRef) extends Spar
 
   override def onExecutorAdded(executor: SparkListenerExecutorAdded) {
     logger.info("Executor Added context name: " + contextName +
-	       " executorId: " + executor.executorId +
+         " executorId: " + executor.executorId +
          " cores: " + executor.executorInfo.totalCores +
          " executorHost: " + executor.executorInfo.executorHost)
     actorRef ! ExecutorAdded

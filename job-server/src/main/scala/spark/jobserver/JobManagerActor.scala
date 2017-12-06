@@ -185,6 +185,7 @@ class JobManagerActor(daoActor: ActorRef)
         // 1- If the job was not started then statusActor will not perform any dao operations
         // 2- If the job was started then statusActor will know about it and currentTime will
         // be added against startTime
+        logger.info("Sending Job resumed message")
         statusActor ! JobResumed("", contextName, DateTime.now())
       }
     }
