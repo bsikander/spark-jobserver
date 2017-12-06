@@ -21,6 +21,7 @@ import spark.jobserver.util.{ContextURLClassLoader, SparkJobUtils}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 import spark.jobserver.common.akka.InstrumentedActor
+import spark.jobserver.util.ManagerSparkListener
 
 object JobManagerActor {
   // Messages
@@ -42,6 +43,8 @@ object JobManagerActor {
   // Results/Data
   case class ContextConfig(contextName: String, contextConfig: SparkConf, hadoopConfig: Configuration)
   case class Initialized(contextName: String, resultActor: ActorRef)
+  case object ExecutorAdded
+  case object ExecutorRemoved
   case class InitError(t: Throwable)
   case class JobLoadingError(err: Throwable)
   case class SparkWebUIUrl(url: String)
@@ -120,6 +123,7 @@ class JobManagerActor(daoActor: ActorRef)
 
   // NOTE: Must be initialized after sparkContext is created
   private var jobCache: JobCache = _
+  private var totalExecutors = 0
 
   private val jobServerNamedObjects = new JobServerNamedObjects(context.system)
 
@@ -140,16 +144,6 @@ class JobManagerActor(daoActor: ActorRef)
     Option(jobContext).foreach(_.stop())
   }
 
-  // Handle external kill events (e.g. killed via YARN)
-  private def sparkListener = {
-    new SparkListener() {
-      override def onApplicationEnd(event: SparkListenerApplicationEnd) {
-        logger.info("Got Spark Application end event, stopping job manager.")
-        self ! PoisonPill
-      }
-    }
-  }
-
   def wrappedReceive: Receive = {
     case Initialize(ctxConfig, resOpt, dataManagerActor) =>
       contextConfig = ctxConfig
@@ -167,7 +161,7 @@ class JobManagerActor(daoActor: ActorRef)
         }
         factory = getContextFactory()
         jobContext = factory.makeContext(config, contextConfig, contextName)
-        jobContext.sparkContext.addSparkListener(sparkListener)
+        jobContext.sparkContext.addSparkListener(new ManagerSparkListener(contextName, self))
         sparkEnv = SparkEnv.get
         jobCache = new JobCacheImpl(jobCacheSize, daoActor, jobContext.sparkContext, jarLoader)
         getSideJars(contextConfig).foreach { jarUri => jobContext.sparkContext.addJar(jarUri) }
@@ -179,7 +173,33 @@ class JobManagerActor(daoActor: ActorRef)
           self ! PoisonPill
       }
 
+    case ExecutorAdded => {
+      totalExecutors += 1
+      logger.info(s"New executor added for $contextName. Total executors: $totalExecutors")
+
+      // 1 is the minimum number of executors that Spark needs to start the jobs.
+      // So, if 1 executor registers then this means that application in Spark cluster
+      // changed from WAITING -> RUNNING state.
+      // So, update the DB if the job was in WAITING state else don't do anything.
+      if (totalExecutors == 1) {
+        // 1- If the job was not started then statusActor will not perform any dao operations
+        // 2- If the job was started then statusActor will know about it and currentTime will
+        // be added against startTime
+        statusActor ! JobResumed("", contextName, DateTime.now())
+      }
+    }
+
+    case ExecutorRemoved => {
+      totalExecutors -= 1
+      logger.info(s"Executor removed for $contextName. Total executors remaining: $totalExecutors")
+      if (totalExecutors == 0) {
+        logger.error("Total executors are 0. Cannot execute jobs. Killing myself")
+        self ! PoisonPill
+      }
+    }
+
     case StartJob(appName, classPath, jobConfig, events) => {
+      logger.info(s"Total executors assigned to context $contextName are $totalExecutors.")
       val loadedJars = jarLoader.getURLs
       getSideJars(jobConfig).foreach { jarUri =>
         val jarToLoad = new URL(convertJarUriSparkToJava(jarUri))
@@ -302,7 +322,8 @@ class JobManagerActor(daoActor: ActorRef)
     statusActor ! Subscribe(jobId, sender, events)
 
     val binInfo = BinaryInfo(appName, binaryType, lastUploadTime)
-    val jobInfo = JobInfo(jobId, contextName, binInfo, classPath, DateTime.now(), None, None)
+    val startTime = if (totalExecutors > 0) Some(DateTime.now()) else None
+    val jobInfo = JobInfo(jobId, contextName, binInfo, classPath, startTime, None, None)
 
     Some(getJobFuture(jobContainer, jobInfo, jobConfig, sender, jobContext, sparkEnv))
   }

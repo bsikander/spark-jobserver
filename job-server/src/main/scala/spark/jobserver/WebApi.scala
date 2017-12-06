@@ -89,6 +89,7 @@ object WebApi {
   def getJobReport(jobInfo: JobInfo, jobStarted: Boolean = false): Map[String, Any] = {
 
     val statusMap = if (jobStarted) Map(StatusKey -> JobStatus.Started) else jobInfo match {
+      case JobInfo(_, _, _, _, None, None, _) => Map(StatusKey -> JobStatus.Waiting)
       case JobInfo(_, _, _, _, _, None, _) => Map(StatusKey -> JobStatus.Running)
       case JobInfo(_, _, _, _, _, _, Some(err))
         if err.errorClass == classOf[JobKilledException].getName =>

@@ -2,34 +2,32 @@ package spark.jobserver.util
 
 import org.slf4j.LoggerFactory
 import org.apache.spark.scheduler._
+import akka.actor.{ActorRef, PoisonPill}
+import spark.jobserver.JobManagerActor.{ExecutorAdded, ExecutorRemoved}
 
-class ManagerSparkListener extends SparkListener {
+class ManagerSparkListener(contextName: String, actorRef: ActorRef) extends SparkListener {
   private val logger = LoggerFactory.getLogger("manager-app-listener")
 
-  override def onApplicationStart(arg0: SparkListenerApplicationStart) {
-     logger.info( "[LISTENER] Application Start attemptId: " + arg0.appAttemptId +
-         " appId: " + arg0.appId + " appName: " + arg0.appName)
-  }
-
   override def onApplicationEnd(arg0: SparkListenerApplicationEnd) {
-     logger.info("[LISTENER] Application End");
+     logger.info("Got Spark Application end event, stopping job manager.")
+     actorRef ! PoisonPill
   }
 
-  override def onExecutorAdded(arg0: SparkListenerExecutorAdded) {
-    logger.info("[LISTENER] Executor Added executorId: " + arg0.executorId +
-         " cores: " + arg0.executorInfo.totalCores + " executorHost: " + arg0.executorInfo.executorHost)
+  override def onExecutorAdded(executor: SparkListenerExecutorAdded) {
+    logger.info("Executor Added context name: " + contextName +
+	       " executorId: " + executor.executorId +
+         " cores: " + executor.executorInfo.totalCores +
+         " executorHost: " + executor.executorInfo.executorHost)
+    actorRef ! ExecutorAdded
+    logger.info("ExecutorAdded message sent to the Driver")
   }
 
-  override def onExecutorRemoved(arg0: SparkListenerExecutorRemoved) {
-    logger.info("[LISTENER] Executor End")
+  override def onExecutorRemoved(executor: SparkListenerExecutorRemoved) {
+    logger.info("Executor removed for context name: " + contextName +
+         " executorId: " + executor.executorId +
+         " reason: " + executor.reason +
+         " time: " + executor.time)
+    actorRef ! ExecutorRemoved
+    logger.info("ExecutorRemoved message sent to the Driver")
   }
-
-  override def  onJobStart(arg0 : SparkListenerJobStart) {
-    logger.info("[LISTENER] Job Start")
-  }
-
-  override def  onJobEnd(arg0 : SparkListenerJobEnd) {
-    logger.info("[LISTENER] Job End")
-  }
-
 }

@@ -187,7 +187,7 @@ class JobFileDAO(config: Config) extends JobDAO {
     in.readUTF,
     readJarInfo(in),
     in.readUTF,
-    new DateTime(in.readLong),
+    Some(new DateTime(in.readLong)),
     Some(new DateTime(in.readLong)),
     readError(in))
 
@@ -196,7 +196,7 @@ class JobFileDAO(config: Config) extends JobDAO {
   }
 
   override def getJobInfos(limit: Int, statusOpt: Option[String] = None): Future[Seq[JobInfo]] = Future {
-    val allJobs = jobs.values.toSeq.sortBy(-_.startTime.getMillis)
+    val allJobs = jobs.values.toSeq.filter(_.startTime.isDefined).sortBy(-_.startTime.get.getMillis)
     val filterJobs = statusOpt match {
       case Some(JobStatus.Running) => {
         allJobs.filter(jobInfo => !jobInfo.endTime.isDefined && !jobInfo.error.isDefined)
