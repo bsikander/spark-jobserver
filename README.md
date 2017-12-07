@@ -532,7 +532,7 @@ The minimum set of parameters to enable client authentication consists of:
 Note, client authentication implies server authentication, therefore client authentication will only be enabled once server authentication is activated.
 
 ### Basic authentication
-Basic authentication (username and password) in Job Server relies on the [Apache Shiro](http://shiro.apache.org/index.html) framework.
+Basic authentication (username and password) in Job Server relies on the [Apache Shiro](http://shiro.apache.org/index.html) framework. 
 Basic authentication is activated by setting this flag (Section 'shiro'):
 ```
 authentication = on
