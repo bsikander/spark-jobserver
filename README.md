@@ -522,7 +522,7 @@ curl -k https://localhost:8090/contexts
 The ```-k``` flag tells curl to "Allow connections to SSL sites without certs". Export your server certificate and import it into the client's truststore to fully utilize ssl security.
 
 #### Client authentication
-Client authentication can be enabled by simply pointing Job Server to a valid Trust Store. 
+Client authentication can be enabled by simply pointing Job Server to a valid Trust Store.
 As for server authentication, this is done by setting appropriate values in the application.conf.
 The minimum set of parameters to enable client authentication consists of:
 ```
@@ -532,7 +532,7 @@ The minimum set of parameters to enable client authentication consists of:
 Note, client authentication implies server authentication, therefore client authentication will only be enabled once server authentication is activated.
 
 ### Basic authentication
-Basic authentication (username and password) in Job Server relies on the [Apache Shiro](http://shiro.apache.org/index.html) framework. 
+Basic authentication (username and password) in Job Server relies on the [Apache Shiro](http://shiro.apache.org/index.html) framework.
 Basic authentication is activated by setting this flag (Section 'shiro'):
 ```
 authentication = on
@@ -584,7 +584,7 @@ MANAGER_EXTRA_SPARK_CONFS="spark.yarn.submit.waitAppCompletion=false"
 MANAGER_LOGGING_OPTS="-Dlog4j.configuration=$REMOTE_JOBSERVER_DIR/log4j-cluster.properties"
 ```
 
-  - Cluster mode for mesos/yarn
+  - Cluster mode for mesos
 ```
 MANAGER_JAR_FILE="$appdir/spark-job-server.jar"
 MANAGER_CONF_FILE="$(basename $conffile)"
@@ -592,6 +592,16 @@ MANAGER_EXTRA_JAVA_OPTIONS=
 MANAGER_EXTRA_SPARK_CONFS="spark.yarn.submit.waitAppCompletion=false|spark.files=$appdir/log4jcluster.properties,$conffile"
 MANAGER_LOGGING_OPTS="-Dlog4j.configuration=log4j-cluster.properties"
 ```
+
+  - Cluster mode for yarn
+```
+MANAGER_JAR_FILE="$appdir/spark-job-server.jar"
+MANAGER_CONF_FILE="$(basename $conffile)"
+MANAGER_EXTRA_JAVA_OPTIONS=
+MANAGER_EXTRA_SPARK_CONFS="spark.yarn.submit.waitAppCompletion=false|spark.files=$appdir/log4jcluster.properties,$conffile"
+MANAGER_LOGGING_OPTS="-Dlog4j.configuration=log4j-cluster.properties"
+```
+
 3. Copy `config/shiro.ini.template` to `shiro.ini` and edit as appropriate. NOTE: only required when `authentication = on`
 4. Copy `config/local.conf.template` to `<environment>.conf` and edit as appropriate.
 5. `bin/server_deploy.sh <environment>` -- this packages the job server along with config files and pushes
