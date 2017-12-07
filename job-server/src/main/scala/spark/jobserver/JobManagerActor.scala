@@ -123,7 +123,12 @@ class JobManagerActor(daoActor: ActorRef)
 
   // NOTE: Must be initialized after sparkContext is created
   private var jobCache: JobCache = _
-  private var totalExecutors = 0
+
+  // If master is set to "local", then SparkListener will not receive any executor events from Spark.
+  // Since everything will be done by Driver, we set the totalExecutors to 1. This will make sure
+  // that job does not go to WAITING state.
+  private var totalExecutors =
+    if (config.getString("spark.master").toLowerCase().startsWith("local")) 1 else 0
 
   private val jobServerNamedObjects = new JobServerNamedObjects(context.system)
 

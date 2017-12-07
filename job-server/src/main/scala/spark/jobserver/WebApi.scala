@@ -99,7 +99,10 @@ object WebApi {
       case JobInfo(_, _, _, _, _, Some(e), None) => Map(StatusKey -> "FINISHED")
     }
     Map("jobId" -> jobInfo.jobId,
-      "startTime" -> jobInfo.startTime.toString(),
+      "startTime" -> (jobInfo.startTime match {
+        case Some(startTime) => startTime.toString()
+        case None => "None"
+      }),
       "classPath" -> jobInfo.classPath,
       "context" -> (if (jobInfo.contextName.isEmpty) "<<ad-hoc>>" else jobInfo.contextName),
       "duration" -> getJobDurationString(jobInfo)) ++ statusMap
