@@ -330,6 +330,7 @@ class JobSqlDAO(config: Config) extends JobDAO with FileCacher {
     val joinQuery = for {
       bin <- binaries
       j <- jobs if j.binId === bin.binId && (statusOpt match {
+                          case Some(JobStatus.Waiting) => !j.startTime.isDefined
                           // !endTime.isDefined
                           case Some(JobStatus.Running) => !j.endTime.isDefined && !j.error.isDefined
                           // endTime.isDefined && error.isDefined
@@ -342,7 +343,7 @@ class JobSqlDAO(config: Config) extends JobDAO with FileCacher {
       (j.jobId, j.contextName, bin.appName, bin.binaryType,
         bin.uploadTime, j.classPath, j.startTime, j.endTime, j.error, j.errorClass, j.errorStackTrace)
     }
-    val sortQuery = joinQuery.sortBy(_._7.desc)
+    val sortQuery = joinQuery.sortBy(_._7.nullsFirst.desc)
     val limitQuery = sortQuery.take(limit)
     // Transform the each row of the table into a map of JobInfo values
     for (r <- db.run(limitQuery.result)) yield {

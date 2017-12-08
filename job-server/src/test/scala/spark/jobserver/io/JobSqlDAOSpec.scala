@@ -88,7 +88,7 @@ class JobSqlDAOSpec extends JobSqlDAOSpecBase with TestJarFinder with FunSpecLik
       val endTime: Option[DateTime] = if (hasEndTime) someEndTime else noEndTime
       val error = if (hasError) someError else None
 
-      JobInfo(id, contextName, jarInfo, classPath, startTime, endTime, error)
+      JobInfo(id, contextName, jarInfo, classPath, Some(startTime), endTime, error)
     }
 
     genTestJobInfo _
@@ -331,7 +331,7 @@ class JobSqlDAOSpec extends JobSqlDAOSpecBase with TestJarFinder with FunSpecLik
     }
     it("retrieve by status equals running should be no end and no error") {
       //save some job insure exist one running job
-      val dt1 = DateTime.now()
+      val dt1 = Some(DateTime.now())
       val dt2 = Some(DateTime.now())
       val someError = Some(ErrorData("test-error", "", ""))
       val finishedJob: JobInfo = JobInfo("test-finished", "test", jarInfo, "test-class", dt1, dt2, None)
@@ -382,6 +382,54 @@ class JobSqlDAOSpec extends JobSqlDAOSpecBase with TestJarFinder with FunSpecLik
       val jobInfo = Await.result(dao.getJobInfo("test-running-with-context"), timeout).get
       jobInfo.endTime shouldBe defined
       jobInfo.error shouldBe defined
+    }
+
+    it("should return rows containing startTime=null first") {
+      val jobWithStartTime = JobInfo("id-with-startTime", "dummyContext", jarInfo, "classpath",
+          Some(DateTime.now()), None, None)
+      val jobWithNoStartTime = JobInfo("id-no-startTime", "dummyContext", jarInfo, "classpath",
+          None, None, None)
+
+      dao.saveJobInfo(jobWithStartTime)
+      dao.saveJobInfo(jobWithNoStartTime)
+
+      val last2Jobs = Await.result(dao.getJobInfos(2), timeout)
+      last2Jobs.head should equal(jobWithNoStartTime)
+      last2Jobs.last should equal(jobWithStartTime)
+    }
+
+    it("should return rows for job status Waiting only") {
+      val jobInfo = JobInfo(_: String, "dummyContext", jarInfo, "classpath",
+          _: Option[DateTime], None, None)
+      val jobWithNoStartTime = jobInfo("id-no-startTime", None)
+
+      dao.saveJobInfo(jobInfo("id-with-startTime", Some(DateTime.now())))
+      dao.saveJobInfo(jobWithNoStartTime)
+
+      val waitingJob = Await.result(dao.getJobInfos(2, Some(JobStatus.Waiting)), timeout)
+      waitingJob.size should be(1)
+      waitingJob.head should equal(jobWithNoStartTime)
+    }
+
+    it("should save a new JobInfo with empty startTime") {
+       val jobInfo = JobInfo("id-no-startTime1", "dummyContext", jarInfo, "classpath", None, None, None)
+       dao.saveJobInfo(jobInfo)
+
+       val jobs = Await.result(dao.getJobInfo("id-no-startTime1"), timeout)
+       jobs.get should equal(jobInfo)
+    }
+
+    it("should update empty startTime column with valid startTime") {
+      val jobInfo = JobInfo("id-no-startTime2", "dummyContext", jarInfo, "classpath",
+          _: Option[DateTime], None, None)
+
+      dao.saveJobInfo(jobInfo(None))
+      Await.result(dao.getJobInfo("id-no-startTime2"), timeout)
+      val startTime = DateTime.now()
+      dao.saveJobInfo(jobInfo(Some(startTime)))
+      val updatedJob = Await.result(dao.getJobInfo("id-no-startTime2"), timeout)
+
+      updatedJob.get should equal(jobInfo(Some(startTime)))
     }
   }
 
