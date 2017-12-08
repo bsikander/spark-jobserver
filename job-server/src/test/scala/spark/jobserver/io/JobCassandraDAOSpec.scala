@@ -82,7 +82,7 @@ class JobCassandraDAOSpec extends TestJarFinder with FunSpecLike with Matchers w
       val error = if (hasError) someError else None
 
       Thread.sleep(2) // hack to guarantee order
-      JobInfo(id, contextName, jarInfo, classPath, startTime, endTime, error)
+      JobInfo(id, contextName, jarInfo, classPath, Some(startTime), endTime, error)
     }
 
   }
@@ -289,7 +289,7 @@ class JobCassandraDAOSpec extends TestJarFinder with FunSpecLike with Matchers w
     }
     it("retrieve by status equals running should be no end and no error") {
       //save some job insure exist one running job
-      val dt1 = DateTime.now()
+      val dt1 = Some(DateTime.now())
       val dt2 = Some(DateTime.now())
       val someError = Some(ErrorData("test-error", "", ""))
       val finishedJob: JobInfo =
@@ -346,6 +346,19 @@ class JobCassandraDAOSpec extends TestJarFinder with FunSpecLike with Matchers w
       updatedJobInfo.get.endTime shouldBe defined
       updatedJobInfo.get.error shouldBe defined
     }
+
+    // TODO: This testcase will fail. The reason is JobsChronologicalTable which has
+    // StartTime as a primary key. This key cannot be null. One solution is to only
+    // insert if startTime is defined but then when somebody calls getJobInfos()
+    // he will see inconsistent data because this function queries from JobsChronologicalTable.
+    // it("should save a new JobInfo with empty startTime") {
+    //  val id = UUIDs.random().toString
+    //  val jobInfo = JobInfo(id, "dummyContext", jarInfo, "classpath", None, None, None)
+    //  dao.saveJobInfo(jobInfo)
+
+    //  val jobs = Await.result(dao.getJobInfo(id), timeout)
+    //  jobs.get should equal(jobInfo)
+    // }
   }
 
   describe("delete binaries") {
