@@ -86,6 +86,7 @@ class JobStatusActor(jobDao: ActorRef) extends InstrumentedActor with YammerMetr
       val jobsForAContext = infos.values.filter(_.contextName == msg.contextName)
       if (jobsForAContext.size > 1) {
         logger.error(s"Multiple jobs found for context ${msg.contextName}!")
+        sender ! MultipleJobsForContext
       } else {
         jobsForAContext.headOption match {
           case Some(jobInfo) =>
@@ -94,7 +95,9 @@ class JobStatusActor(jobDao: ActorRef) extends InstrumentedActor with YammerMetr
               case (info, msg: JobResumed) =>
                 info.copy(startTime = Some(msg.startTime))
             }
-          case None => logger.info(s"No job found for context ${msg.contextName}")
+          case None =>
+            logger.info(s"No job found for context ${msg.contextName}")
+            sender ! NoJobFoundForContext
         }
       }
 
