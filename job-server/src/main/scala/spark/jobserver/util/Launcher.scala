@@ -38,6 +38,7 @@ abstract class Launcher(config: Config) {
       try {
         logger.info("Adding custom arguments to launcher")
         addCustomArguments()
+
         logger.info("Start launcher application")
         handler = launcher.startApplication()
         true
