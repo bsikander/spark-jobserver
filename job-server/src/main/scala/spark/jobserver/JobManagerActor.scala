@@ -5,7 +5,7 @@ import java.net.{URI, URL}
 import java.util.concurrent.Executors._
 import java.util.concurrent.atomic.AtomicInteger
 
-import akka.actor.{ActorRef, PoisonPill, Props}
+import akka.actor.{ActorRef, PoisonPill, Props, Terminated, Identify, ActorIdentity}
 import com.typesafe.config.Config
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.{SparkConf, SparkEnv}
@@ -52,7 +52,8 @@ object JobManagerActor {
 
 
   // Akka 2.2.x style actor props for actor creation
-  def props(daoActor: ActorRef): Props = Props(classOf[JobManagerActor], daoActor)
+  def props(daoActor: ActorRef, supervisorActorAddress: String = ""): Props =
+    Props(classOf[JobManagerActor], daoActor, supervisorActorAddress)
 }
 
 /**
@@ -83,7 +84,7 @@ object JobManagerActor {
  *   }
  * }}}
  */
-class JobManagerActor(daoActor: ActorRef)
+class JobManagerActor(daoActor: ActorRef, supervisorActorAddress: String)
   extends InstrumentedActor {
 
   import CommonMessages._
@@ -123,6 +124,11 @@ class JobManagerActor(daoActor: ActorRef)
 
   private val jobServerNamedObjects = new JobServerNamedObjects(context.system)
 
+  if (!supervisorActorAddress.isEmpty()) {
+    logger.info(s"Sending identify message to supervisor at supervisorActorAddress")
+    context.actorSelection(supervisorActorAddress) ! Identify(1)
+  }
+
   private def getEnvironment(_jobId: String): JobEnvironment = {
     val _contextCfg = contextConfig
     new JobEnvironment with DataFileCache {
@@ -151,6 +157,14 @@ class JobManagerActor(daoActor: ActorRef)
   }
 
   def wrappedReceive: Receive = {
+    case ActorIdentity(memberActors, supervisorActorRef) =>
+      logger.info("Received supervisor's response for Identify message. Adding a watch.")
+      supervisorActorRef.foreach(context.watch(_))
+
+    case Terminated(actorRef) =>
+      logger.info(s"Supervisor actor (${actorRef.path.address.toString}) terminated!! Killing myself!")
+      self ! PoisonPill
+
     case Initialize(ctxConfig, resOpt, dataManagerActor) =>
       contextConfig = ctxConfig
       logger.info("Starting context with config:\n" + contextConfig.root.render)

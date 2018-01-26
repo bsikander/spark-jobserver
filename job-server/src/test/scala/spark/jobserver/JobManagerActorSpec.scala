@@ -2,6 +2,7 @@ package spark.jobserver
 
 import java.io.File
 import java.nio.file.{Files, StandardOpenOption}
+import akka.actor.{Props, ActorRef}
 
 import com.typesafe.config.{Config, ConfigFactory}
 import spark.jobserver.DataManagerActor.RetrieveData
@@ -38,7 +39,6 @@ class JobManagerActorSpec extends JobSpecBase(JobManagerActorSpec.getNewSystem) 
     daoActor = system.actorOf(JobDAOActor.props(dao))
     contextConfig = JobManagerActorSpec.getContextConfig(adhoc = false)
     manager = system.actorOf(JobManagerActor.props(daoActor))
-    supervisor = TestProbe().ref
   }
 
   after {
@@ -311,6 +311,26 @@ class JobManagerActorSpec extends JobSpecBase(JobManagerActorSpec.getNewSystem) 
       manager ! JobManagerActor.StartJob("demo", newWordCountClass, emptyConfig, allEvents)
       expectMsgClass(startJobWait, classOf[CommonMessages.JobValidationFailed])
       expectNoMsg()
+    }
+
+    it("manager should kill itself if the master is down") {
+        val dataManager = system.actorOf(Props.empty)
+
+        supervisor = system.actorOf(Props(classOf[LocalContextSupervisorActor], TestProbe().ref, dataManager), "context-supervisor")
+        val managerWithMasterAddress = system.actorOf(
+            Props(classOf[JobManagerActor], daoActor, s"${supervisor.path.address.toString}${supervisor.path.toStringWithoutAddress}"))
+
+        val supervisorProbe = TestProbe()
+        supervisorProbe.watch(supervisor)
+
+        val managerProbe = TestProbe()
+        managerProbe.watch(managerWithMasterAddress)
+
+        Thread.sleep(2000) // Wait for manager actor to initialize and add a watch
+        supervisor ! akka.actor.PoisonPill
+        supervisorProbe.expectTerminated(supervisor)
+
+        managerProbe.expectTerminated(managerWithMasterAddress, 5.seconds.dilated)
     }
   }
 
