@@ -81,6 +81,26 @@ class JobStatusActor(jobDao: ActorRef) extends InstrumentedActor with YammerMetr
           info.copy(startTime = msg.jobInfo.startTime)
       }
 
+    case msg: JobResumed =>
+      logger.info("Job Resumed message received")
+      val jobsForAContext = infos.values.filter(_.contextName == msg.contextName)
+      if (jobsForAContext.size > 1) {
+        logger.error(s"Multiple jobs found for context ${msg.contextName}!")
+        sender ! MultipleJobsForContext
+      } else {
+        jobsForAContext.headOption match {
+          case Some(jobInfo) =>
+            val msgWithJobId = JobResumed(jobInfo.jobId, msg.contextName, msg.startTime)
+            processStatus(msgWithJobId, "resuming job after acquiring executors from Spark") {
+              case (info, msg: JobResumed) =>
+                info.copy(startTime = Some(msg.startTime))
+            }
+          case None =>
+            logger.info(s"No job found for context ${msg.contextName}")
+            sender ! NoJobFoundForContext
+        }
+      }
+
     case msg: JobFinished =>
       processStatus(msg, "finished OK", remove = true) {
         case (info, msg: JobFinished) =>

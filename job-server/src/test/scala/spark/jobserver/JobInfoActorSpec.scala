@@ -70,7 +70,7 @@ with FunSpecLike with Matchers with BeforeAndAfter with BeforeAndAfterAll {
     it("should return job info when requested for jobId that exists") {
       val dt = DateTime.parse("2013-05-29T00Z")
       val jobInfo =
-        JobInfo("foo", "context", BinaryInfo("demo", BinaryType.Jar, dt), "com.abc.meme", dt, None, None)
+        JobInfo("foo", "context", BinaryInfo("demo", BinaryType.Jar, dt), "com.abc.meme", Some(dt), None, None)
       dao.saveJobInfo(jobInfo)
       actor ! GetJobStatus("foo")
       expectMsg(jobInfo)
@@ -79,7 +79,7 @@ with FunSpecLike with Matchers with BeforeAndAfter with BeforeAndAfterAll {
     it("should return job info when requested for jobId that exists, where the job is a Python job") {
       val dt = DateTime.parse("2013-05-29T00Z")
       val jobInfo =
-        JobInfo("bar", "context", BinaryInfo("demo", BinaryType.Egg, dt), "com.abc.meme", dt, None, None)
+        JobInfo("bar", "context", BinaryInfo("demo", BinaryType.Egg, dt), "com.abc.meme", Some(dt), None, None)
       dao.saveJobInfo(jobInfo)
       actor ! GetJobStatus("bar")
       expectMsg(jobInfo)
@@ -94,9 +94,9 @@ with FunSpecLike with Matchers with BeforeAndAfter with BeforeAndAfterAll {
       val dt1 = DateTime.parse("2013-05-28T00Z")
       val dt2 = DateTime.parse("2013-05-29T00Z")
       val jobInfo1 =
-        JobInfo("foo-1", "context", BinaryInfo("demo", BinaryType.Jar, dt1), "com.abc.meme", dt2, None, None)
+        JobInfo("foo-1", "context", BinaryInfo("demo", BinaryType.Jar, dt1), "com.abc.meme", Some(dt2), None, None)
       val jobInfo2 =
-        JobInfo("foo-2", "context", BinaryInfo("demo", BinaryType.Jar, dt2), "com.abc.meme", dt2, None, None)
+        JobInfo("foo-2", "context", BinaryInfo("demo", BinaryType.Jar, dt2), "com.abc.meme", Some(dt2), None, None)
       dao.saveJobInfo(jobInfo1)
       dao.saveJobInfo(jobInfo2)
       actor ! GetJobStatuses(Some(10))
@@ -107,9 +107,9 @@ with FunSpecLike with Matchers with BeforeAndAfter with BeforeAndAfterAll {
       val dt1 = DateTime.parse("2013-05-28T00Z")
       val dt2 = DateTime.parse("2013-05-29T00Z")
       val jobInfo1 =
-        JobInfo("foo-1", "context", BinaryInfo("demo", BinaryType.Jar, dt1), "com.abc.meme", dt1, None, None)
+        JobInfo("foo-1", "context", BinaryInfo("demo", BinaryType.Jar, dt1), "com.abc.meme", Some(dt1), None, None)
       val jobInfo2 =
-        JobInfo("foo-2", "context", BinaryInfo("demo", BinaryType.Egg, dt2), "com.abc.meme", dt2, None, None)
+        JobInfo("foo-2", "context", BinaryInfo("demo", BinaryType.Egg, dt2), "com.abc.meme", Some(dt2), None, None)
       dao.saveJobInfo(jobInfo1)
       dao.saveJobInfo(jobInfo2)
       actor ! GetJobStatuses(Some(1))
@@ -122,9 +122,9 @@ with FunSpecLike with Matchers with BeforeAndAfter with BeforeAndAfterAll {
       val dt4 = dt3.plusMinutes(5)
       val binaryInfo = BinaryInfo("demo", BinaryType.Jar, dt1)
       val someError = Some(ErrorData(new Throwable("test-error")))
-      val runningJob = JobInfo("running-1", "context", binaryInfo, "com.abc.meme", dt1, None, None)
-      val errorJob = JobInfo("error-1", "context", binaryInfo, "com.abc.meme", dt2, None, someError)
-      val finishedJob = JobInfo("finished-1", "context", binaryInfo, "com.abc.meme", dt3, Some(dt4), None)
+      val runningJob = JobInfo("running-1", "context", binaryInfo, "com.abc.meme", Some(dt1), None, None)
+      val errorJob = JobInfo("error-1", "context", binaryInfo, "com.abc.meme", Some(dt2), None, someError)
+      val finishedJob = JobInfo("finished-1", "context", binaryInfo, "com.abc.meme", Some(dt3), Some(dt4), None)
 
       dao.saveJobInfo(runningJob)
       dao.saveJobInfo(errorJob)
@@ -158,10 +158,10 @@ with FunSpecLike with Matchers with BeforeAndAfter with BeforeAndAfterAll {
       val dt1 = DateTime.parse("2013-05-28T00Z")
       val dt2 = DateTime.parse("2013-05-29T00Z")
       val jobInfo1 =
-        JobInfo("foo-1", "context", BinaryInfo("demo", BinaryType.Jar, dt1), "com.abc.meme", dt1, None, None)
+        JobInfo("foo-1", "context", BinaryInfo("demo", BinaryType.Jar, dt1), "com.abc.meme", Some(dt1), None, None)
       val jobInfo2 =
         JobInfo("foo-2", "context", BinaryInfo("demo", BinaryType.Jar, dt2),
-          "com.abc.meme", dt2, None, someError)
+          "com.abc.meme", Some(dt2), None, someError)
       dao.saveJobInfo(jobInfo1)
       dao.saveJobInfo(jobInfo2)
       actor ! GetJobResult("foo-1")

@@ -167,9 +167,13 @@ class JobFileDAO(config: Config) extends JobDAO {
     out.writeUTF(jobInfo.contextName)
     writeJarInfo(out, jobInfo.binaryInfo)
     out.writeUTF(jobInfo.classPath)
-    out.writeLong(jobInfo.startTime.getMillis)
-    val time = if (jobInfo.endTime.isEmpty) jobInfo.startTime.getMillis else jobInfo.endTime.get.getMillis
-    out.writeLong(time)
+    val startTime = jobInfo.startTime match {
+      case Some(_) => jobInfo.startTime.get.getMillis
+      case None => new DateTime(Long.MinValue).getMillis
+    }
+    out.writeLong(startTime)
+    val endTime = if (jobInfo.endTime.isEmpty) startTime else jobInfo.endTime.get.getMillis
+    out.writeLong(endTime)
     out.writeUTF(jobInfo.error.map(_.message).getOrElse(""))
     out.writeUTF(jobInfo.error.map(_.errorClass).getOrElse(""))
     out.writeUTF(jobInfo.error.map(_.stackTrace).getOrElse(""))
@@ -187,7 +191,7 @@ class JobFileDAO(config: Config) extends JobDAO {
     in.readUTF,
     readJarInfo(in),
     in.readUTF,
-    new DateTime(in.readLong),
+    Some(new DateTime(in.readLong)),
     Some(new DateTime(in.readLong)),
     readError(in))
 
@@ -196,8 +200,9 @@ class JobFileDAO(config: Config) extends JobDAO {
   }
 
   override def getJobInfos(limit: Int, statusOpt: Option[String] = None): Future[Seq[JobInfo]] = Future {
-    val allJobs = jobs.values.toSeq.sortBy(-_.startTime.getMillis)
+    val allJobs = jobs.values.toSeq.sortBy(-_.startTime.get.getMillis)
     val filterJobs = statusOpt match {
+      case Some(JobStatus.Waiting) => allJobs.filter(!_.startTime.isDefined)
       case Some(JobStatus.Running) => {
         allJobs.filter(jobInfo => !jobInfo.endTime.isDefined && !jobInfo.error.isDefined)
       }

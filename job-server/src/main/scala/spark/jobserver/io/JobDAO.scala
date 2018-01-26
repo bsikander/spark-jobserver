@@ -66,15 +66,16 @@ object ErrorData {
 // NOTE: if endTime is not None, then the job has finished.
 case class JobInfo(jobId: String, contextName: String,
                    binaryInfo: BinaryInfo, classPath: String,
-                   startTime: DateTime, endTime: Option[DateTime],
+                   startTime: Option[DateTime] = None, endTime: Option[DateTime],
                    error: Option[ErrorData]) {
-  def jobLengthMillis: Option[Long] = endTime.map { end => new Duration(startTime, end).getMillis }
+  def jobLengthMillis: Option[Long] = endTime.map { end => new Duration(startTime.get, end).getMillis }
 
   def isRunning: Boolean = endTime.isEmpty
   def isErroredOut: Boolean = endTime.isDefined && error.isDefined
 }
 
 object JobStatus {
+  val Waiting = "WAITING"
   val Running = "RUNNING"
   val Error = "ERROR"
   val Finished = "FINISHED"

@@ -61,14 +61,14 @@ class JobSqlDAO(config: Config) extends JobDAO with FileCacher {
 
   // Explicitly avoiding to label 'jarId' as a foreign key to avoid dealing with
   // referential integrity constraint violations.
-  class Jobs(tag: Tag) extends Table[(String, String, Int, String, Timestamp,
+  class Jobs(tag: Tag) extends Table[(String, String, Int, String, Option[Timestamp],
     Option[Timestamp], Option[String], Option[String], Option[String])](tag, "JOBS") {
     def jobId = column[String]("JOB_ID", O.PrimaryKey)
     def contextName = column[String]("CONTEXT_NAME")
     def binId = column[Int]("BIN_ID")
     // FK to JARS table
     def classPath = column[String]("CLASSPATH")
-    def startTime = column[Timestamp]("START_TIME")
+    def startTime = column[Option[Timestamp]]("START_TIME")
     def endTime = column[Option[Timestamp]]("END_TIME")
     def error = column[Option[String]]("ERROR")
     def errorClass = column[Option[String]]("ERROR_CLASS")
@@ -297,7 +297,7 @@ class JobSqlDAO(config: Config) extends JobDAO with FileCacher {
           jobInfo.binaryInfo.binaryType,
           jobInfo.binaryInfo.uploadTime),
         60 seconds)
-    val startTime = convertDateJodaToSql(jobInfo.startTime)
+    val startTime = jobInfo.startTime.map(t => convertDateJodaToSql(t))
     val endTime = jobInfo.endTime.map(t => convertDateJodaToSql(t))
     val error = jobInfo.error.map(e => e.message)
     val errorClass = jobInfo.error.map(e => e.errorClass)
@@ -310,7 +310,7 @@ class JobSqlDAO(config: Config) extends JobDAO with FileCacher {
   }
 
   private def jobInfoFromRow(row: (String, String, String, String,
-    Timestamp, String, Timestamp, Option[Timestamp],
+    Timestamp, String, Option[Timestamp], Option[Timestamp],
     Option[String], Option[String], Option[String])): JobInfo = row match {
     case (id, context, app, binType, upload, classpath, start, end, err, errCls, errStTr) =>
       val errorInfo = err.map(ErrorData(_, errCls.getOrElse(""), errStTr.getOrElse("")))
@@ -319,7 +319,7 @@ class JobSqlDAO(config: Config) extends JobDAO with FileCacher {
         context,
         BinaryInfo(app, BinaryType.fromString(binType), convertDateSqlToJoda(upload)),
         classpath,
-        convertDateSqlToJoda(start),
+        start.map(convertDateSqlToJoda),
         end.map(convertDateSqlToJoda),
         errorInfo
       )
@@ -330,6 +330,7 @@ class JobSqlDAO(config: Config) extends JobDAO with FileCacher {
     val joinQuery = for {
       bin <- binaries
       j <- jobs if j.binId === bin.binId && (statusOpt match {
+                          case Some(JobStatus.Waiting) => !j.startTime.isDefined
                           // !endTime.isDefined
                           case Some(JobStatus.Running) => !j.endTime.isDefined && !j.error.isDefined
                           // endTime.isDefined && error.isDefined
@@ -342,7 +343,7 @@ class JobSqlDAO(config: Config) extends JobDAO with FileCacher {
       (j.jobId, j.contextName, bin.appName, bin.binaryType,
         bin.uploadTime, j.classPath, j.startTime, j.endTime, j.error, j.errorClass, j.errorStackTrace)
     }
-    val sortQuery = joinQuery.sortBy(_._7.desc)
+    val sortQuery = joinQuery.sortBy(_._7.nullsFirst.desc)
     val limitQuery = sortQuery.take(limit)
     // Transform the each row of the table into a map of JobInfo values
     for (r <- db.run(limitQuery.result)) yield {

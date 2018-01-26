@@ -24,7 +24,7 @@ with FunSpecLike with Matchers with BeforeAndAfter with BeforeAndAfterAll {
   private val appName = "appName"
   private val jarInfo = BinaryInfo(appName, BinaryType.Jar, DateTime.now)
   private val classPath = "classPath"
-  private val jobInfo = JobInfo(jobId, contextName, jarInfo, classPath, DateTime.now, None, None)
+  private val jobInfo = JobInfo(jobId, contextName, jarInfo, classPath, Some(DateTime.now), None, None)
 
   override def afterAll() {
     akka.AkkaTestUtils.shutdownAndWait(JobStatusActorSpec.system)
@@ -81,6 +81,44 @@ with FunSpecLike with Matchers with BeforeAndAfter with BeforeAndAfterAll {
       expectMsg(NoSuchJobId)
     }
 
+    it("should not resume job if there is no job containing context") {
+      actor ! JobResumed("", "dummyContext", DateTime.now())
+      expectMsg(NoJobFoundForContext)
+    }
+
+    it("should not resume job if multiple jobs found for a context") {
+      actor ! JobInit(jobInfo)
+      val jobInfo2 = JobInfo("jobId2", contextName, jarInfo, classPath, Some(DateTime.now), None, None)
+      actor ! JobInit(jobInfo2)
+
+      actor ! JobResumed("", "contextName", DateTime.now())
+
+      expectMsg(MultipleJobsForContext)
+    }
+
+    it("should be informed JobResumed with valid job id, if a job exists for a specific context") {
+      actor ! Subscribe(jobId, self, Set(classOf[JobResumed]))
+      actor ! JobInit(jobInfo)
+      val currentDateTime = DateTime.now()
+      val msg = JobResumed("", "contextName", currentDateTime)
+
+      actor ! msg
+      // Since when JobResumed message is sent, we don't know the jobId.
+      // StatusActor, internally looks for a job which contains this contextName
+      // and then updates the startTime of this job and saves it to DB.
+      val msgWithJobId = JobResumed("jobId", "contextName", currentDateTime)
+      expectMsg(msgWithJobId)
+    }
+
+    it("should be informed JobStarted even if startTime is None") {
+      actor ! Subscribe("jobId2", self, Set(classOf[JobStarted]))
+      val jobInfoWithEmptyStartTime = JobInfo("jobId2", contextName, jarInfo, classPath, None, None, None)
+      actor ! JobInit(jobInfoWithEmptyStartTime)
+      val msg = JobStarted("jobId2", jobInfoWithEmptyStartTime)
+      actor ! msg
+      expectMsg(msg)
+    }
+
     it("should be ok to subscribe beofore job init") {
       actor ! Subscribe(jobId, self, Set(classOf[JobStarted]))
       actor ! JobInit(jobInfo)
@@ -130,9 +168,9 @@ with FunSpecLike with Matchers with BeforeAndAfter with BeforeAndAfterAll {
       expectMsg(Seq(jobInfo))
 
       val startTime = DateTime.now
-      actor ! JobStarted(jobId, jobInfo.copy(startTime=startTime))
+      actor ! JobStarted(jobId, jobInfo.copy(startTime=Some(startTime)))
       actor ! GetRunningJobStatus
-      expectMsg(Seq(JobInfo(jobId, contextName, jarInfo, classPath, startTime, None, None)))
+      expectMsg(Seq(JobInfo(jobId, contextName, jarInfo, classPath, Some(startTime), None, None)))
 
       val finishTIme = DateTime.now
       actor ! JobFinished(jobId, finishTIme)
@@ -142,7 +180,7 @@ with FunSpecLike with Matchers with BeforeAndAfter with BeforeAndAfterAll {
 
     it("should update JobValidationFailed status correctly") {
       val initTime = DateTime.now
-      val jobInfo = JobInfo(jobId, contextName, jarInfo, classPath, initTime, None, None)
+      val jobInfo = JobInfo(jobId, contextName, jarInfo, classPath, Some(initTime), None, None)
       actor ! JobInit(jobInfo)
 
       val failedTime = DateTime.now

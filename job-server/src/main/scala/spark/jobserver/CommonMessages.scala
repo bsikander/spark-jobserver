@@ -12,6 +12,7 @@ trait StatusMessage {
 object CommonMessages {
   // job status messages
   case class JobStarted(jobId: String, jobInfo: JobInfo) extends StatusMessage
+  case class JobResumed(jobId: String, contextName: String, startTime: DateTime) extends StatusMessage
   case class JobFinished(jobId: String, endTime: DateTime) extends StatusMessage
   case class JobValidationFailed(jobId: String, endTime: DateTime, err: Throwable) extends StatusMessage
   case class JobErroredOut(jobId: String, endTime: DateTime, err: Throwable) extends StatusMessage
@@ -30,6 +31,8 @@ object CommonMessages {
   case class Unsubscribe(jobId: String, receiver: ActorRef) // all events for this jobId and receiving actor
 
   // errors
+  case object NoJobFoundForContext
+  case object MultipleJobsForContext
   case object NoSuchJobId
   case object NoSuchApplication
   case object NoSuchClass
