@@ -37,7 +37,7 @@ class JobManagerSpec extends FunSpecLike with Matchers with BeforeAndAfter {
   }
 
   def writeConfigFile(configMap: Map[String, Any]): String = {
-    val config = ConfigFactory.parseMap(configMap.asJava).withFallback(ConfigFactory.defaultOverrides())
+    val config = ConfigFactory.parseMap(configMap.asJava).withFallback(ConfigFactory.load("local.test.jobsqldao.conf"))
     Files.write(configFile,
       Seq(config.root.render(ConfigRenderOptions.concise)).asJava,
       Charset.forName("UTF-8"))
