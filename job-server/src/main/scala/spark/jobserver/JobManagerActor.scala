@@ -36,7 +36,7 @@ object JobManagerActor {
 
   case object GetContextConfig
   case object SparkContextStatus
-  case object GetContextInfo
+  case object GetContextData
 
   case class DeleteData(name: String)
 
@@ -45,7 +45,7 @@ object JobManagerActor {
   case class Initialized(contextName: String, resultActor: ActorRef)
   case class InitError(t: Throwable)
   case class JobLoadingError(err: Throwable)
-  case class ContextInfo(appId: String, url: Option[String])
+  case class ContextData(appId: String, url: Option[String])
   case object SparkContextAlive
   case object SparkContextDead
 
@@ -262,7 +262,7 @@ class JobManagerActor(daoActor: ActorRef, supervisorActorAddress: String,
       }
     }
 
-    case GetContextInfo => {
+    case GetContextData => {
       if (jobContext.sparkContext == null) {
         sender ! SparkContextDead
       } else {
@@ -270,9 +270,9 @@ class JobManagerActor(daoActor: ActorRef, supervisorActorAddress: String,
           val appId = jobContext.sparkContext.applicationId;
           val webUiUrl = jobContext.sparkContext.uiWebUrl
           val msg = if (webUiUrl.isDefined) {
-            ContextInfo(appId, Some(webUiUrl.get))
+            ContextData(appId, Some(webUiUrl.get))
           } else {
-            ContextInfo(appId, None)
+            ContextData(appId, None)
           }
           sender ! msg
         } catch {

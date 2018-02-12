@@ -378,14 +378,14 @@ class WebApi(system: ActorSystem,
       logger.info("User authentication");
       (get & path(Segment)) { (contextName) =>
         respondWithMediaType(MediaTypes.`application/json`) { ctx =>
-          val future = supervisor ? GetSparkContextInfo(contextName)
+          val future = supervisor ? GetSparkContextData(contextName)
           future.map {
-            case SparkContextInfo(name, appId, Some(url)) =>
+            case SparkContextData(name, appId, Some(url)) =>
               val stcode = 200;
               val contextMap = Map("context" -> contextName, "applicationId" -> appId, "url" -> url)
               logger.info("StatusCode: " + stcode + ", " + contextMap);
               ctx.complete(stcode, contextMap)
-            case SparkContextInfo(name, appId, None) =>
+            case SparkContextData(name, appId, None) =>
               val stcode = 200;
               val contextMap = Map("context" -> contextName, "applicationId" -> appId)
               logger.info("StatusCode: " + stcode + ", " + contextMap);
