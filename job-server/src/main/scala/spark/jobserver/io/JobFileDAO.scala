@@ -157,6 +157,14 @@ class JobFileDAO(config: Config) extends JobDAO {
   private def createJarName(appName: String, uploadTime: DateTime): String =
     appName + "-" + uploadTime.toString().replace(':', '_')
 
+  override def saveContextInfo(contextInfo: ContextInfo): Unit = {
+    throw new NotImplementedError
+  }
+
+  override def getContextInfo(id: String): Future[Option[ContextInfo]] = {
+    throw new NotImplementedError;
+  }
+
   override def saveJobInfo(jobInfo: JobInfo) {
     writeJobInfo(jobsOutputStream, jobInfo)
     jobs(jobInfo.jobId) = jobInfo

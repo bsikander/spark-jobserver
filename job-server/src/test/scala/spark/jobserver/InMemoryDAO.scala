@@ -4,7 +4,7 @@ import java.io.{BufferedOutputStream, FileOutputStream}
 
 import com.typesafe.config.Config
 import org.joda.time.DateTime
-import spark.jobserver.io.{BinaryType, JobDAO, JobInfo, JobStatus}
+import spark.jobserver.io.{BinaryType, JobDAO, JobInfo, JobStatus, ContextInfo}
 
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -44,6 +44,14 @@ class InMemoryDAO extends JobDAO {
       bos.close()
     }
     outFile.getAbsolutePath
+  }
+
+  override def saveContextInfo(contextInfo: ContextInfo): Unit = {
+    throw new NotImplementedError
+  }
+
+  override def getContextInfo(id: String): Future[Option[ContextInfo]] = {
+    throw new NotImplementedError;
   }
 
   val jobInfos = mutable.HashMap.empty[String, JobInfo]

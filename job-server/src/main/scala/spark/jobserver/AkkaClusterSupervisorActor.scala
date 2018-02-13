@@ -23,6 +23,8 @@ import org.slf4j.LoggerFactory
 import spark.jobserver.io.JobDAOActor.CleanContextJobInfos
 import spark.jobserver.JobManagerActor.{GetContextData, ContextData, SparkContextDead}
 
+import spark.jobserver.io.{JobDAOActor, ContextInfo, ContextStatus}
+
 /**
  * The AkkaClusterSupervisorActor launches Spark Contexts as external processes
  * that connect back with the master node via Akka Cluster.
@@ -210,27 +212,57 @@ class AkkaClusterSupervisorActor(daoActor: ActorRef, dataManagerActor: ActorRef)
         cluster.down(ref.path.address)
         ref ! PoisonPill
         failureFunc(e)
+        updateContextStatus(actorName, Some(ref.path.address.toString), ContextStatus.Error, Some(e))
       case Success(JobManagerActor.InitError(t)) =>
         logger.info("Failed to initialize context " + ref, t)
         cluster.down(ref.path.address)
         ref ! PoisonPill
         failureFunc(t)
+        updateContextStatus(actorName, Some(ref.path.address.toString), ContextStatus.Error, Some(t))
       case Success(JobManagerActor.Initialized(ctxName, resActor)) =>
         logger.info("SparkContext {} joined", ctxName)
         contexts(ctxName) = (ref, resActor)
         context.watch(ref)
         successFunc(ref)
+        updateContextStatus(actorName, Some(ref.path.address.toString), ContextStatus.Running, None)
       case _ => logger.info("Failed for unknown reason.")
         cluster.down(ref.path.address)
         ref ! PoisonPill
-        failureFunc(new RuntimeException("Failed for unknown reason."))
+        val e = new RuntimeException("Failed for unknown reason.")
+        failureFunc(e)
+        updateContextStatus(actorName, Some(ref.path.address.toString), ContextStatus.Error, Some(e))
     }
+  }
+
+    private def updateContextStatus(actorName: String, clusterAddress: Option[String],
+      state: String, error: Option[Throwable]) = {
+    import akka.pattern.ask
+    val daoAskTimeout = Timeout(3 seconds)
+    val resp = Await.result(
+      (daoActor ? JobDAOActor.GetContextInfo(actorName.replace("jobManager-", "")))(daoAskTimeout).
+        mapTo[JobDAOActor.ContextResponse], daoAskTimeout.duration)
+
+    val context = resp.contextInfo.get
+    val endTime = error match {
+      case None => context.endTime
+      case _ => Some(DateTime.now())
+    }
+    daoActor ! JobDAOActor.SaveContextInfo(ContextInfo(context.id,
+                                                       context.name,
+                                                       context.config,
+                                                       clusterAddress,
+                                                       context.startTime,
+                                                       endTime,
+                                                       state,
+                                                       error))
   }
 
   private def startContext(name: String, contextConfig: Config, isAdHoc: Boolean)
                           (successFunc: ActorRef => Unit)(failureFunc: Throwable => Unit): Unit = {
     require(!(contexts contains name), "There is already a context named " + name)
-    val contextActorName = "jobManager-" + java.util.UUID.randomUUID().toString.substring(16)
+
+    val contextId = java.util.UUID.randomUUID().toString.substring(16)
+    val contextActorName = "jobManager-" + contextId
 
     logger.info("Starting context with actor name {}", contextActorName)
 
@@ -246,12 +278,18 @@ class AkkaClusterSupervisorActor(daoActor: ActorRef, dataManagerActor: ActorRef)
       Map("is-adhoc" -> isAdHoc.toString, "context.name" -> name).asJava
     ).withFallback(contextConfig)
 
+    val contextInfo = ContextInfo(contextId, name,
+        mergedContextConfig.root().render(ConfigRenderOptions.concise()), None,
+        DateTime.now(), None, _: String, _: Option[Throwable])
     val launcher = new ManagerLauncher(config, contextConfig,
         selfAddress.toString, contextActorName, contextDir.toString)
     if (!launcher.start()) {
-      failureFunc(new Exception("Failed to launch context JVM"))
+      val e = new Exception("Failed to launch context JVM");
+      failureFunc(e);
+      daoActor ! JobDAOActor.SaveContextInfo(contextInfo(ContextStatus.Error, Some(e)))
     } else {
       contextInitInfos(contextActorName) = (mergedContextConfig, isAdHoc, successFunc, failureFunc)
+      daoActor ! JobDAOActor.SaveContextInfo(contextInfo(ContextStatus.Started, None))
     }
   }
 

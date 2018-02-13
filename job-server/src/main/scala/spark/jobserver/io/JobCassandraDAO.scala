@@ -150,6 +150,14 @@ class JobCassandraDAO(config: Config) extends JobDAO with FileCacher {
     }
   }
 
+  override def saveContextInfo(contextInfo: ContextInfo): Unit = {
+    throw new NotImplementedError
+  }
+
+  override def getContextInfo(id: String): Future[Option[ContextInfo]] = {
+    throw new NotImplementedError;
+  }
+
   override def saveJobConfig(jobId: String, jobConfig: Config): Unit = {
     session.executeAsync(
       insertInto(JobsTable).

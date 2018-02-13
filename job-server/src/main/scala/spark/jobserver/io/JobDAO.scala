@@ -74,7 +74,20 @@ case class JobInfo(jobId: String, contextName: String,
   def isErroredOut: Boolean = endTime.isDefined && error.isDefined
 }
 
+case class ContextInfo(id: String, name: String,
+                   config: String, actorAddress: Option[String],
+                   startTime: DateTime, endTime: Option[DateTime],
+                   state: String, error: Option[Throwable])
+
 object JobStatus {
+  val Running = "RUNNING"
+  val Error = "ERROR"
+  val Finished = "FINISHED"
+  val Started = "STARTED"
+  val Killed = "KILLED"
+}
+
+object ContextStatus {
   val Running = "RUNNING"
   val Error = "ERROR"
   val Finished = "FINISHED"
@@ -120,6 +133,20 @@ trait JobDAO {
    * @return the local file path of the retrieved binary file.
    */
   def retrieveBinaryFile(appName: String, binaryType: BinaryType, uploadTime: DateTime): String
+
+  /**
+   * Persist a context info.
+   *
+   * @param contextInfo
+   */
+  def saveContextInfo(contextInfo: ContextInfo)
+
+  /**
+   * Return context info for a specific context name.
+   *
+   * @return
+   */
+  def getContextInfo(id: String): Future[Option[ContextInfo]]
 
   /**
    * Persist a job info.
