@@ -53,14 +53,15 @@ class AkkaClusterSupervisorActor(daoActor: ActorRef, dataManagerActor: ActorRef)
   //TODO: try to pass this state to the jobManager at start instead of having to track
   //extra state.  What happens if the WebApi process dies before the forked process
   //starts up?  Then it never gets initialized, and this state disappears.
-  private val contextInitInfos = mutable.HashMap.empty[String,
-                                                      (Config, Boolean, ActorRef => Unit, Throwable => Unit)]
+//  private val contextInitInfos = mutable.HashMap.empty[String,
+//                                                    (Config, Boolean, ActorRef => Unit, Throwable => Unit)]
 
   // actor name -> (JobManagerActor ref, ResultActor ref)
   private val contexts = mutable.HashMap.empty[String, (ActorRef, ActorRef)]
 
   private val cluster = Cluster(context.system)
   private val selfAddress = cluster.selfAddress
+  val daoAskTimeout = Timeout(3 seconds)
 
   // This is for capturing results for ad-hoc jobs. Otherwise when ad-hoc job dies, resultActor also dies,
   // and there is no way to retrieve results.
@@ -90,17 +91,39 @@ class AkkaClusterSupervisorActor(daoActor: ActorRef, dataManagerActor: ActorRef)
         val actorName = actorRef.path.name
         if (actorName.startsWith("jobManager")) {
           logger.info("Received identify response, attempting to initialize context at {}", memberActors)
-          (for { (contextConfig, isAdHoc, successFunc, failureFunc) <- contextInitInfos.remove(actorName) }
-           yield {
-             initContext(contextConfig, actorName,
-                         actorRef, contextInitTimeout)(isAdHoc, successFunc, failureFunc)
-           }).getOrElse({
-            logger.warn("No initialization or callback found for jobManager actor {}", actorRef.path)
-            actorRef ! PoisonPill
-          })
+
+          val contextId = actorName.replace("jobManager-", "")
+          logger.info("[BEHROZ] Going to DB to get the contextInfo")
+          val getContextResp = Await.result(
+              (daoActor ? JobDAOActor.GetContextInfo(contextId))(daoAskTimeout).
+                mapTo[JobDAOActor.ContextResponse], daoAskTimeout.duration)
+          logger.info("[BEHROZ] Got response back")
+
+          getContextResp.contextInfo match {
+            case Some(contextInfo) =>
+              logger.info("[BEHROZ] Reading config returned by DB")
+              val contextConfig = ConfigFactory.parseString(contextInfo.config)
+
+              val isAdhoc = contextConfig.getBoolean("is-adhoc")
+              logger.info("[BEHROZ] Creating success and failure functions")
+              val functions = getSuccessAndFailureFunctions(
+                                actorRef,
+                                contextConfig.getString("context.name"),
+                                contextConfig.getString("originator") match {
+                                  case "" => None
+                                  case address => Some(address)
+                                },
+                                isAdhoc)
+
+              initContext(contextConfig, actorName, actorRef,
+                  contextInitTimeout, isAdhoc)(functions._1, functions._2)
+              logger.info("[BEHROZ] Doing Init")
+            case None =>
+              logger.warn("No initialization or callback found for jobManager actor {}", actorRef.path)
+              actorRef ! PoisonPill
+          }
         }
       }
-
 
     case AddContextsFromConfig =>
       addContextsFromConfig(config)
@@ -133,11 +156,7 @@ class AkkaClusterSupervisorActor(daoActor: ActorRef, dataManagerActor: ActorRef)
       if (contexts contains name) {
         originator ! ContextAlreadyExists
       } else {
-        startContext(name, mergedConfig, false) { ref =>
-          originator ! ContextInitialized
-        } { err =>
-          originator ! ContextInitError(err)
-        }
+        startContext(name, mergedConfig, false, Some(originator))
       }
 
     case StartAdHocContext(classPath, contextConfig) =>
@@ -152,11 +171,7 @@ class AkkaClusterSupervisorActor(daoActor: ActorRef, dataManagerActor: ActorRef)
       // TODO(velvia): Make the check above atomic.  See
       // https://github.com/spark-jobserver/spark-jobserver/issues/349
 
-      startContext(contextName, mergedConfig, true) { ref =>
-        originator ! contexts(contextName)
-      } { err =>
-        originator ! ContextInitError(err)
-      }
+      startContext(contextName, mergedConfig, true, Some(originator))
 
     case GetResultActor(name) =>
       sender ! contexts.get(name).map(_._2).getOrElse(globalResultActor)
@@ -198,10 +213,9 @@ class AkkaClusterSupervisorActor(daoActor: ActorRef, dataManagerActor: ActorRef)
   private def initContext(contextConfig: Config,
                           actorName: String,
                           ref: ActorRef,
-                          timeoutSecs: Long = 1)
-                         (isAdHoc: Boolean,
-                          successFunc: ActorRef => Unit,
-                          failureFunc: Throwable => Unit): Unit = {
+                          timeoutSecs: Long = 1,
+                          isAdHoc: Boolean)
+                          (successFunc: ActorRef => Unit, failureFunc: Throwable => Unit): Unit = {
     import akka.pattern.ask
 
     val resultActor = if (isAdHoc) globalResultActor else context.actorOf(Props(classOf[JobResultActor]))
@@ -237,7 +251,6 @@ class AkkaClusterSupervisorActor(daoActor: ActorRef, dataManagerActor: ActorRef)
     private def updateContextStatus(actorName: String, clusterAddress: Option[String],
       state: String, error: Option[Throwable]) = {
     import akka.pattern.ask
-    val daoAskTimeout = Timeout(3 seconds)
     val resp = Await.result(
       (daoActor ? JobDAOActor.GetContextInfo(actorName.replace("jobManager-", "")))(daoAskTimeout).
         mapTo[JobDAOActor.ContextResponse], daoAskTimeout.duration)
@@ -257,8 +270,8 @@ class AkkaClusterSupervisorActor(daoActor: ActorRef, dataManagerActor: ActorRef)
                                                        error))
   }
 
-  private def startContext(name: String, contextConfig: Config, isAdHoc: Boolean)
-                          (successFunc: ActorRef => Unit)(failureFunc: Throwable => Unit): Unit = {
+  private def startContext(name: String, contextConfig: Config, isAdHoc: Boolean,
+      originator: Option[ActorRef]): Unit = {
     require(!(contexts contains name), "There is already a context named " + name)
 
     val contextId = java.util.UUID.randomUUID().toString.substring(16)
@@ -273,22 +286,32 @@ class AkkaClusterSupervisorActor(daoActor: ActorRef, dataManagerActor: ActorRef)
     }.getOrElse(Files.createTempDirectory("jobserver"))
     logger.info("Created working directory {} for context {}", contextDir: Any, name)
 
+    val originatorAddress = originator match {
+            case Some(ref) => ref.path.toStringWithAddress(ref.path.address)
+            case None => ""
+          }
     // Now create the contextConfig merged with the values we need
     val mergedContextConfig = ConfigFactory.parseMap(
-      Map("is-adhoc" -> isAdHoc.toString, "context.name" -> name).asJava
+      Map("is-adhoc" -> isAdHoc.toString,
+          "context.name" -> name,
+          "originator" -> originatorAddress).asJava
     ).withFallback(contextConfig)
 
     val contextInfo = ContextInfo(contextId, name,
         mergedContextConfig.root().render(ConfigRenderOptions.concise()), None,
         DateTime.now(), None, _: String, _: Option[Throwable])
+
     val launcher = new ManagerLauncher(config, contextConfig,
         selfAddress.toString, contextActorName, contextDir.toString)
     if (!launcher.start()) {
       val e = new Exception("Failed to launch context JVM");
-      failureFunc(e);
+      originator match {
+        case Some(ref) => ref ! ContextInitError(e)
+        case None => logger.error("Unable to start context" + name, e) // For adding contexts from config
+      }
+
       daoActor ! JobDAOActor.SaveContextInfo(contextInfo(ContextStatus.Error, Some(e)))
     } else {
-      contextInitInfos(contextActorName) = (mergedContextConfig, isAdHoc, successFunc, failureFunc)
       daoActor ! JobDAOActor.SaveContextInfo(contextInfo(ContextStatus.Started, None))
     }
   }
@@ -298,11 +321,43 @@ class AkkaClusterSupervisorActor(daoActor: ActorRef, dataManagerActor: ActorRef)
       contexts.keySet().asScala.foreach { contextName =>
         val contextConfig = config.getConfig("spark.contexts." + contextName)
           .withFallback(defaultContextConfig)
-        startContext(contextName, contextConfig, false) { ref => } {
-          e => logger.error("Unable to start context" + contextName, e)
-        }
+        startContext(contextName, contextConfig, false, None)
       }
     }
-
   }
+
+  private def getSuccessAndFailureFunctions(jobManagerActorRef: ActorRef, contextName: String,
+      originatorAddress: Option[String], isAdhoc: Boolean): (ActorRef => Unit, Throwable => Unit) = {
+     import scala.concurrent.duration.FiniteDuration
+
+     val refInitTimeout = Duration(3, TimeUnit.SECONDS)
+
+     val originatorRef: Option[ActorRef] = originatorAddress match {
+       case Some(address) =>
+         Some(
+             Await.result(context.actorSelection(address).resolveOne(refInitTimeout), daoAskTimeout.duration))
+       case None => None
+     }
+
+      var successFunc: (ActorRef => Unit) = { ref => }
+      var failureFunc: (Throwable => Unit) = { e => }
+
+      (originatorRef, isAdhoc) match {
+        case (None, false) =>
+          // Context creation from config
+          failureFunc = { e => logger.error("Unable to start context" + contextName, e)}
+        case (Some(ref), true) =>
+          // Adhoc Context
+          successFunc = {ref => ref ! jobManagerActorRef }
+          failureFunc = {err => ref ! ContextInitError(err)}
+        case (Some(ref), false) =>
+          // Post /contexts
+          successFunc = {ref => ref ! ContextInitialized }
+          failureFunc = {err => ref ! ContextInitError(err)}
+        case (None, true) =>
+          // Unknown case
+          logger.error("Unknown state. Originator reference is None and isAdhoc is set")
+      }
+      (successFunc, failureFunc)
+    }
 }
