@@ -48,6 +48,7 @@ class AkkaClusterSupervisorActor(daoActor: ActorRef, dataManagerActor: ActorRef)
                                                 TimeUnit.SECONDS)
   val contextDeletionTimeout = SparkJobUtils.getContextDeletionTimeout(config)
   import context.dispatcher
+  var tempActorRef: ActorRef = _
 
   //actor name -> (context isadhoc, success callback, failure callback)
   //TODO: try to pass this state to the jobManager at start instead of having to track
@@ -61,7 +62,7 @@ class AkkaClusterSupervisorActor(daoActor: ActorRef, dataManagerActor: ActorRef)
 
   private val cluster = Cluster(context.system)
   private val selfAddress = cluster.selfAddress
-  val daoAskTimeout = Timeout(3 seconds)
+  val daoAskTimeout = Timeout(10 seconds)
 
   // This is for capturing results for ad-hoc jobs. Otherwise when ad-hoc job dies, resultActor also dies,
   // and there is no way to retrieve results.
@@ -122,6 +123,8 @@ class AkkaClusterSupervisorActor(daoActor: ActorRef, dataManagerActor: ActorRef)
               logger.warn("No initialization or callback found for jobManager actor {}", actorRef.path)
               actorRef ! PoisonPill
           }
+        } else {
+          logger.info("[BBBBBBBBBBBBB====] " + actorRef.path.address.toString + "-" + actorRef.path.name)
         }
       }
 
@@ -156,8 +159,16 @@ class AkkaClusterSupervisorActor(daoActor: ActorRef, dataManagerActor: ActorRef)
       if (contexts contains name) {
         originator ! ContextAlreadyExists
       } else {
+        tempActorRef = originator
+        context.watch(originator)
         startContext(name, mergedConfig, false, Some(originator))
       }
+//      logger.info(s"<<<<<BEHROZ>>>> ${originator.path.address} ${originator.path.name}")
+//          logger.info(s"${originator.path.toStringWithoutAddress}")
+//      val tempActorAddress =
+//        RootActorPath(originator.path.address) / "temp" / originator.path.name
+//      context.actorSelection(tempActorAddress) ! ContextInitialized
+//      logger.info("After =>" + tempActorAddress.toStringWithAddress(originator.path.address))
 
     case StartAdHocContext(classPath, contextConfig) =>
       val originator = sender
@@ -203,6 +214,7 @@ class AkkaClusterSupervisorActor(daoActor: ActorRef, dataManagerActor: ActorRef)
     case Terminated(actorRef) =>
       val name: String = actorRef.path.name
       logger.info("Actor terminated: {}", name)
+      logger.info("[BEHROZ] " + actorRef.path.address.toString + "-" + actorRef.path.toStringWithoutAddress)
       for ((name, _) <- contexts.find(_._2._1 == actorRef)) {
         contexts.remove(name)
         daoActor ! CleanContextJobInfos(name, DateTime.now())
@@ -285,9 +297,18 @@ class AkkaClusterSupervisorActor(daoActor: ActorRef, dataManagerActor: ActorRef)
       Files.createTempDirectory(Paths.get(logDir), s"jobserver-$encodedContextName")
     }.getOrElse(Files.createTempDirectory("jobserver"))
     logger.info("Created working directory {} for context {}", contextDir: Any, name)
-
+    import akka.serialization._
     val originatorAddress = originator match {
-            case Some(ref) => ref.path.toStringWithAddress(ref.path.address)
+            case Some(ref) =>
+              logger.info("[Behroz] => " + selfAddress.toString)
+              logger.info("[Behroz] => " + ref.path.address.toString)
+              logger.info("[Behroz] Host => " + ref.path.address.host)
+              logger.info("[Behroz] Port => " + ref.path.address.port)
+              logger.info("[Behroz] Protocol => " + ref.path.address.protocol)
+              logger.info("[Behroz] System => " + ref.path.address.system)
+
+              val identifier: String = Serialization.serializedActorPath(ref)
+              identifier
             case None => ""
           }
     // Now create the contextConfig merged with the values we need
@@ -330,12 +351,31 @@ class AkkaClusterSupervisorActor(daoActor: ActorRef, dataManagerActor: ActorRef)
       originatorAddress: Option[String], isAdhoc: Boolean): (ActorRef => Unit, Throwable => Unit) = {
      import scala.concurrent.duration.FiniteDuration
 
-     val refInitTimeout = Duration(3, TimeUnit.SECONDS)
+     val refInitTimeout = Duration(20, TimeUnit.SECONDS)
 
      val originatorRef: Option[ActorRef] = originatorAddress match {
        case Some(address) =>
-         Some(
-             Await.result(context.actorSelection(address).resolveOne(refInitTimeout), daoAskTimeout.duration))
+         //val a = RootActorPath(selfAddress) / "temp" / address.replace("akka://JobServer/temp/", "")
+         //logger.info("[Behroz] => Originator: " + a.toStringWithAddress(selfAddress))
+         try {
+//           val tempActorAddress =
+//            RootActorPath(tempActorRef.path.address) / "temp" / tempActorRef.path.name
+//           import akka.serialization._
+
+//           val deserializedActorRef = extendedSystem.provider.resolveActorRef(address)
+           // context.system.actorSelection("/temp/*") ! Identify(1)
+            logger.info("[BEHROZ] test " + tempActorRef.path.toStringWithoutAddress + " -" +
+               tempActorRef.path.address.toString)
+           logger.info("[BEHROZ] Resolving temp actor " + address)
+           val tt = context.system.actorSelection(address).resolveOne(refInitTimeout)
+           val r = Some(
+               Await.result(tt,
+                   daoAskTimeout.duration))
+           r
+         } catch {
+           case err: Exception => logger.error("[BEHROZ] EXCEPTION Timeout", err.getMessage)
+           None
+         }
        case None => None
      }
 
@@ -346,14 +386,14 @@ class AkkaClusterSupervisorActor(daoActor: ActorRef, dataManagerActor: ActorRef)
         case (None, false) =>
           // Context creation from config
           failureFunc = { e => logger.error("Unable to start context" + contextName, e)}
-        case (Some(ref), true) =>
+        case (Some(origRef), true) =>
           // Adhoc Context
-          successFunc = {ref => ref ! jobManagerActorRef }
-          failureFunc = {err => ref ! ContextInitError(err)}
-        case (Some(ref), false) =>
+          successFunc = {ref => origRef ! jobManagerActorRef }
+          failureFunc = {err => origRef ! ContextInitError(err)}
+        case (Some(origRef), false) =>
           // Post /contexts
-          successFunc = {ref => ref ! ContextInitialized }
-          failureFunc = {err => ref ! ContextInitError(err)}
+          successFunc = {ref => origRef ! ContextInitialized }
+          failureFunc = {err => origRef ! ContextInitError(err)}
         case (None, true) =>
           // Unknown case
           logger.error("Unknown state. Originator reference is None and isAdhoc is set")

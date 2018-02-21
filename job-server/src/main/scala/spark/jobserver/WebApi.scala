@@ -432,12 +432,14 @@ class WebApi(system: ActorSystem,
             } else {
               parameterMap { (params) =>
                 // parse the config from the body, using url params as fallback values
+
                 val baseConfig = ConfigFactory.parseString(configString)
                 val contextConfig = getContextConfig(baseConfig, params)
                 val (cName, config) = determineProxyUser(contextConfig, authInfo, contextName)
                 val future = (supervisor ? AddContext(cName, config))(contextTimeout.seconds)
                 respondWithMediaType(MediaTypes.`application/json`) { ctx =>
                   logger.info("used configuration: " + contextConfig);
+                  try {
                   future.map {
                     case ContextInitialized =>
                       val stcode = StatusCodes.OK;
@@ -447,6 +449,10 @@ class WebApi(system: ActorSystem,
                     case ContextAlreadyExists => badRequest(ctx, "context " + contextName + " exists")
                     case ContextInitError(e) => logAndComplete(ctx, "CONTEXT INIT ERROR", 500, e);
                   }
+                  } catch {
+                  case err: Exception => logger.error("[BEHROZ] EVERYTHING BLOWN", err.getMessage)
+                  logAndComplete(ctx, "Exception in creating context", 500, err);
+                }
                 }
               }
             }
