@@ -1,7 +1,10 @@
 (use http://websequencediagrams.com/ to visualize sequence diagrams)
 
-Jar routes
+LocalClusterSupervisor (context-per-jvm=false)
 ==========
+
+Jar routes
+----------
 - get a list of mapping from appName to uploadTime for all the known job jars:
 
         user->WebApi: GET /jars
@@ -21,7 +24,7 @@ Jar routes
         WebApi->user: 200
 
 Context routes
-==============
+----------
 - get a list of all known contextNames
 
         user->WebApi: GET /contexts
@@ -64,7 +67,7 @@ Context routes
 
 
 Job routes
-==========
+----------
 - get a list of JobInfo(jobId, contextName, JarInfo, classPath, startTime, Option(endTime), Option(Throwable)) of all known jobs
 
         user->WebApi: GET /jobs
@@ -188,7 +191,7 @@ AkkaClusterSupervisor (context-per-jvm=true)
 ==========
 
 Context delete route (Normal flow)
-==========
+----------
         title DELETE /contexts (Normal flow)
 
         user->WebApi: DELETE /contexts/<contextName>
@@ -208,7 +211,7 @@ Context delete route (Normal flow)
         WebApi ->user: 200
 
 Context delete route (time out flow)
-============
+----------
 
         title DELETE /contexts (stop context timed out)
 
