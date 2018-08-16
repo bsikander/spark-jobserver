@@ -289,3 +289,29 @@ Context delete route (time out flow)
         WebApi->user: 404
 
 
+Adhoc Context Stop
+----------
+        title Adhoc contexts stop (Normal flow)
+
+        user->WebApi: POST /job/<params>
+        WebApi->AkkaClusterSupervisorActor: StartAdHocContext(classPath, contextConfig)
+        AkkaClusterSupervisorActor->WebApi: ActorRef
+        WebApi->JobManagerActor: StartJob(...)
+        space 
+        note right of JobManagerActor:Normal flow of starting a job
+        space 
+        space 
+        note right of JobManagerActor:Job finished
+        JobManagerActor->JobStatusActor: JobFinished
+        JobStatusActor->WebApi: JobResult
+        WebApi->user: 200
+        JobManagerActor->JobManagerActor: StopContextAndShutdown
+        JobManagerActor->JobDAOActor: SaveContextInfo(..., STOPPING)
+        JobManagerActor->SparkContext: sc.stop()
+        SparkContext -> JobManagerActor: onApplicationEnd
+        JobManagerActor ->JobManagerActor: SparkContextStopped
+        JobManagerActor ->JobManagerActor: PoisonPill
+        DeathWatch ->AkkaClusterSupervisorActor: Terminated
+        note right of AkkaClusterSupervisorActor:set context state=FINISHED
+        DeathWatch->ProductionReaper: Terminated
+        ProductionReaper->ActorSystem: shutdown
