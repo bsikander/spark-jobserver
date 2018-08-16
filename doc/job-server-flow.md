@@ -187,7 +187,7 @@ Job routes
 AkkaClusterSupervisor (context-per-jvm=true)
 ==========
 
-Context delete route
+Context delete route (Normal flow)
 ==========
 ```
 title DELETE /contexts (Normal flow)
@@ -221,4 +221,108 @@ DeathWatch->ProductionReaper: Terminated
 ProductionReaper->ActorSystem: shutdown
 
 WebApi ->user: 200
+```
+
+Context delete route (time out flow)
+=========
+```
+title DELETE /contexts (stop context timed out)
+
+user->WebApi: DELETE /contexts/<contextName>
+
+WebApi->AkkaClusterSupervisorActor: StopContext(contextName)
+
+note right of AkkaClusterSupervisorActor:set context state=STOPPING
+AkkaClusterSupervisorActor->JobManagerActor: StopContextAndShutdown
+
+JobManagerActor->JobManagerActor: Schedule ContextStopScheduledMsgTimeout
+
+JobManagerActor->SparkContext: sc.stop()
+
+JobManagerActor ->JobManagerActor: ContextStopScheduledMsgTimeout
+
+JobManagerActor ->AkkaClusterSupervisorActor: ContextStopInProgress
+
+AkkaClusterSupervisorActor ->WebApi: ContextStopInProgress
+
+WebApi ->user: 202 & Location Header
+
+space
+==User request to url which is in location header to get the state of stop==
+
+user->WebApi: GET /contexts/<contextName>
+
+WebApi->AkkaClusterSupervisorActor: GetSparkContexData(contextName)
+
+AkkaClusterSupervisorActor->JobManagerActor: GetContexData
+
+opt if context is running:
+JobManagerActor->SparkContext: 			applicationId/webUrl
+
+SparkContext ->JobManagerActor: 
+
+JobManagerActor->AkkaClusterSupervisorActor: ContexData
+
+AkkaClusterSupervisorActor->WebApi: SparkContexData(ctxInfo, appId, webUrl)
+end
+
+opt if context is not alive:
+JobManagerActor->SparkContext: 			applicationId/webUrl
+
+JobManagerActor->JobManagerActor: Exception
+JobManagerActor->AkkaClusterSupervisorActor: SparkContextDead
+
+AkkaClusterSupervisorActor->WebApi:SparkContexData(ctxInfo, None, None)
+end
+
+WebApi->user: 200 & json with current state
+
+
+space
+
+space
+==User can send more requests when context stop is in progress==
+space
+
+user->WebApi: DELETE /contexts/<contextName>
+
+WebApi->AkkaClusterSupervisorActor: StopContext(contextName)
+
+AkkaClusterSupervisorActor->JobManagerActor: StopContextAndShutdown
+
+JobManagerActor ->AkkaClusterSupervisorActor: ContextStopInProgress
+
+AkkaClusterSupervisorActor ->WebApi: ContextStopInProgress
+
+WebApi ->user: 202 & Location Header
+
+space
+==Finally when context will stop, the following flow will be followed==
+space
+
+SparkContext -> JobManagerActor: onApplicationEnd
+
+JobManagerActor ->JobManagerActor: SparkContextStopped
+
+JobManagerActor ->JobManagerActor: PoisonPill
+
+DeathWatch ->AkkaClusterSupervisorActor: Terminated
+
+note right of AkkaClusterSupervisorActor:set context state=FINISHED
+DeathWatch->ProductionReaper: Terminated
+
+ProductionReaper->ActorSystem: shutdown
+
+space
+==Further requests will fail==
+space
+
+user->WebApi: GET /contexts/<contextName>
+
+WebApi->AkkaClusterSupervisorActor: GetSparkContexData(contextName)
+
+AkkaClusterSupervisorActor->WebApi: NoSuchContext
+
+WebApi->user: 404
+
 ```
