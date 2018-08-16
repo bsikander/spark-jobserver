@@ -190,8 +190,11 @@ Job routes
 AkkaClusterSupervisor (context-per-jvm=true)
 ==========
 
-Context delete route (Normal flow)
+Context routes
 ----------
+
+- Context delete route (Normal flow)
+
         title DELETE /contexts (Normal flow)
 
         user->WebApi: DELETE /contexts/<contextName>
@@ -210,8 +213,7 @@ Context delete route (Normal flow)
         ProductionReaper->ActorSystem: shutdown
         WebApi ->user: 200
 
-Context delete route (time out flow)
-----------
+- Context delete route (time out flow)
 
         title DELETE /contexts (stop context timed out)
 
@@ -289,8 +291,8 @@ Context delete route (time out flow)
         WebApi->user: 404
 
 
-Adhoc Context Stop
-----------
+- Adhoc Context Stop
+
         title Adhoc contexts stop (Normal flow)
 
         user->WebApi: POST /job/<params>
