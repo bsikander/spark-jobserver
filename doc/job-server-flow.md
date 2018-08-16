@@ -183,3 +183,42 @@ Job routes
            JobInfoActor->WebApi: JobInfo
            WebApi->user: 200 + "ERROR"
         end
+
+AkkaClusterSupervisor (context-per-jvm=true)
+==========
+
+Context delete route
+==========
+```
+title DELETE /contexts (Normal flow)
+
+user->WebApi: DELETE /contexts/<contextName>
+
+WebApi->AkkaClusterSupervisorActor: StopContext(contextName)
+
+AkkaClusterSupervisorActor->JobManagerActor: StopContextAndShutdown
+
+JobManagerActor->JobManagerActor: ContextStopScheduledMsgTimeout
+
+JobManagerActor->SparkContext: sc.stop()
+
+SparkContext -> JobManagerActor: onApplicationEnd
+
+JobManagerActor ->JobManagerActor: SparkContextStopped
+
+JobManagerActor->JobManagerActor: ContextStopScheduledMsgTimeout.cancel()
+
+JobManagerActor ->AkkaClusterSupervisorActor: SparkContextStopped
+
+JobManagerActor ->JobManagerActor: PoisonPill
+
+AkkaClusterSupervisorActor ->WebApi: ContextStopped
+
+DeathWatch ->AkkaClusterSupervisorActor: Terminated
+
+DeathWatch->ProductionReaper: Terminated
+
+ProductionReaper->ActorSystem: shutdown
+
+WebApi ->user: 200
+```
